@@ -30,7 +30,7 @@ Rules:
 - Cover both the US and China (and Europe or elsewhere when it matters). Do not force a quota.
 - One item per event. If several candidates report the same event, list all their ids in one item. When an official candidate (kind "official") covers the event, always include it, first.
 - Prefer official announcements and first-hand sources. A rumor (unconfirmed report) can only be a brief.
-- You may add up to 2 extra URLs per item ("extraUrls") only if you know the exact official page for the same event. Do not guess URLs.
+- When an important event has no official candidate, you may open the company's own newsroom or blog to find the official announcement and add its exact URL in "extraUrls" (up to 2 per item). Only add pages you have opened and confirmed cover the same event. Never guess a URL: every one is fetched and checked, and a wrong one wastes the slot.
 
 Reply with JSON only, no prose:
 {"items":[{"type":"story"|"brief","candidates":["c3","c9"],"extraUrls":[],"reason":"one short sentence"}]}
