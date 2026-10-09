@@ -8,7 +8,7 @@
 import type { Brief, ChartRow, Issue, L10n, Place, Quote, RegionKey, Source, Story, Visual } from '../../shared/issue';
 import { tokenize } from '../../shared/issue';
 import type { Draft, DraftQuote, DraftStory } from './draft';
-import { numbersIn } from './checks';
+import { extraQuantities } from './checks';
 
 const CATEGORY_ZH: Record<string, string> = {
   Models: '模型',
@@ -99,9 +99,8 @@ export function checkTranslation(key: string, en: string, zh: string | undefined
     warnings.push(`${key}: the translation changed the citations; citation numbers removed in Chinese.`);
     out = out.replace(/\[\d+\]/g, '');
   }
-  const enNumbers = new Set(numbersIn(en));
-  const extra = numbersIn(out).filter((n) => !enNumbers.has(n));
-  if (extra.length > 0) warnings.push(`${key}: Chinese has numbers not in the English (${[...new Set(extra)].join(', ')}). Check units.`);
+  const extra = extraQuantities(en, out);
+  if (extra.length > 0) warnings.push(`${key}: the Chinese states values the English does not (${extra.join(', ')}). Check the translation.`);
   return out;
 }
 

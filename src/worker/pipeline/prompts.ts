@@ -24,10 +24,11 @@ export function selectPrompt(issueDate: string, candidates: Candidate[]): string
 Pick what goes in it from the candidates below.
 
 Rules:
-- At most 10 items: 4 to 6 stories and up to 4 briefs. Fewer is fine when the news is thin. Never pad.
-- Score each event on impact, novelty, credibility and relevance to people who build with or decide about AI.
+- Aim for 5 or 6 stories and 3 or 4 briefs, at most 10 items. Go below 5 stories only when the news is genuinely thin. Never pad.
+- Score each event on impact, novelty, credibility and relevance to people who build with or decide about AI. New models, products, prices, funding, policy, research results and hardware come first.
+- Leave out: event and ticket promotions, conference agendas, sponsored posts, minor maintenance or deprecation notices, interviews and opinion pieces with no news, and stories that are not about AI.
 - Cover both the US and China (and Europe or elsewhere when it matters). Do not force a quota.
-- One item per event. If several candidates report the same event, list all their ids in one item.
+- One item per event. If several candidates report the same event, list all their ids in one item. When an official candidate (kind "official") covers the event, always include it, first.
 - Prefer official announcements and first-hand sources. A rumor (unconfirmed report) can only be a brief.
 - You may add up to 2 extra URLs per item ("extraUrls") only if you know the exact official page for the same event. Do not guess URLs.
 
@@ -65,6 +66,8 @@ export function writePrompt(issueDate: string, items: WriteItem[]): string {
 
 Write ONLY from the source texts below. Code will check your work afterwards: every quote must appear word for word in the cited source text, and every number you write must appear in the sources. Anything that fails is cut, so never write a number or claim you cannot quote.
 
+Length: the whole issue is read in about four minutes, so aim for 800 to 1,000 words in total. Write every story you were given unless its sources do not support it.
+
 Style:
 - Headline: who + did what + the key number, at most 12 words. No questions. No hype.
 - Banned words: game-changer, revolutionary, shocking, insane, mind-blowing, breaking, groundbreaking, unprecedented.
@@ -75,7 +78,8 @@ Style:
 - The whole issue stays under 1,000 words.
 
 Checked numbers ("marks"):
-- Every important number in the summary is wrapped as <m0>number words</m0>, <m1>…</m1>, numbered from 0 within the story.
+- Numbers are what readers come for. When the sources give figures (prices, money raised, valuations, model sizes, scores, user counts, percentages, dates something ships), put the one to three that matter most into the headline or summary. Leave numbers out only when the sources have none.
+- Every number in the summary is wrapped as <m0>number words</m0>, <m1>…</m1>, numbered from 0 within the story. Numbers in the headline need no marker but must also appear in the sources.
 - Each mark has an entry in "marks": the source index and a VERBATIM quote from that source's text that contains the number (copy it exactly; you may skip text with "…"). If the source is not in English, add an English "translation" of the quote.
 
 Questions readers would ask (2 or 3 per story, specific to the story):
@@ -99,7 +103,7 @@ Reply with JSON only, no prose, in this shape:
    "questions":[{"q","status","a","cites":[{"source":0,"quote":"…","translation":"…"}]}]}],
  "briefs":[{"region","org","lon","lat","kind","text","sourceName","url"}]}
 
-In "sources", copy url, name, kind, lang and published from the material for the sources you used, in the order you index them.
+In "sources", copy url, name, kind, lang and published from the material for the sources you used, in the order you index them, official sources first.
 
 Material:
 ${json(material)}`;

@@ -111,6 +111,39 @@ export async function fetchSnapshot(env: Env, rawUrl: string): Promise<Snapshot>
   return snapshot;
 }
 
+const GENERIC_IMAGE_NAME = /open-?graph|social-?share|share-?image|og-?default|default-?og|logo|wordmark|opengraph-illustration/i;
+
+/** A share image whose name says it is a site default or a logo. */
+export const looksLikeDefaultImage = (url: string): boolean => {
+  try {
+    return GENERIC_IMAGE_NAME.test(decodeURIComponent(url));
+  } catch {
+    return GENERIC_IMAGE_NAME.test(url);
+  }
+};
+
+/**
+ * Share images that are not pictures of the story: named like a default share image,
+ * from a site that only has those, or reused across two or more different pages.
+ */
+export async function genericImages(env: Env, snapshots: Snapshot[], noImageHosts: Set<string>): Promise<Set<string>> {
+  const generic = new Set<string>();
+  const images = [...new Set(snapshots.map((s) => s.image).filter((i): i is string => Boolean(i)))];
+  for (const snap of snapshots) {
+    if (!snap.image) continue;
+    if (looksLikeDefaultImage(snap.image) || noImageHosts.has(new URL(snap.url).hostname)) generic.add(snap.image);
+  }
+  if (images.length > 0) {
+    const { results } = await env.DB.prepare(
+      `SELECT image FROM source_snapshots WHERE image IN (${images.map(() => '?').join(', ')}) GROUP BY image HAVING COUNT(DISTINCT url) > 1`,
+    )
+      .bind(...images)
+      .all<{ image: string }>();
+    results.forEach((r) => generic.add(r.image));
+  }
+  return generic;
+}
+
 /** Fetches many sources with bounded concurrency; failures are reported, not thrown. */
 export async function fetchSnapshots(env: Env, urls: string[], concurrency = 6): Promise<{ snapshots: Map<string, Snapshot>; failures: { url: string; error: string }[] }> {
   const snapshots = new Map<string, Snapshot>();

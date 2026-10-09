@@ -16,8 +16,8 @@ import { listConnectedAgents, credentialFor } from '../connect';
 import { safeErrorText } from '../a2a';
 import { saveIssue } from '../issues';
 import { validateIssue } from '../../shared/issue';
-import { collectCandidates, type Candidate, type FeedResult } from './feeds';
-import { fetchSnapshots, type Snapshot } from './snapshot';
+import { NO_IMAGE_HOSTS, collectCandidates, type Candidate, type FeedResult } from './feeds';
+import { fetchSnapshots, genericImages, type Snapshot } from './snapshot';
 import { selectPrompt, translatePrompt, writePrompt, type WriteItem } from './prompts';
 import { agentTurn } from './agent';
 import { extractJson, readDraft } from './draft';
@@ -35,6 +35,8 @@ export interface RunReport {
   picked: number;
   sourcesFetched: number;
   sourceFailures: { url: string; error: string }[];
+  /** Share images dropped as logos or site defaults rather than pictures of the story. */
+  genericImages: number;
   checks: ItemCheck[];
   review: string;
   translationWarnings: string[];
@@ -47,6 +49,9 @@ export interface RunReport {
 
 const MIN_STORIES = 3;
 const MAX_SOURCES_PER_ITEM = 3;
+// Workers allow 50 outbound requests per invocation on the free plan: 16 feeds + this
+// many source pages + 3 agent turns stays under it.
+const MAX_SOURCE_FETCHES = 26;
 
 /** The issue a run started now prepares: the morning after 19:30 UTC, today before it. */
 export function issueDateFor(at: Date): string {
@@ -113,6 +118,7 @@ export async function runPipeline(env: Env, options: { trigger: 'cron' | 'manual
     picked: 0,
     sourcesFetched: 0,
     sourceFailures: [],
+    genericImages: 0,
     checks: [],
     review: 'Check 2 (independent review agent) is not connected yet; drafts have passed checks 1 and 3 only.',
     translationWarnings: [],
@@ -144,7 +150,11 @@ export async function runPipeline(env: Env, options: { trigger: 'cron' | 'manual
       .slice(0, 10)
       .map((raw) => {
         const item = (raw ?? {}) as { type?: unknown; candidates?: unknown; extraUrls?: unknown };
-        const chosen = (Array.isArray(item.candidates) ? item.candidates : []).map((id) => byId.get(String(id))).filter((c): c is Candidate => Boolean(c));
+        const chosen = (Array.isArray(item.candidates) ? item.candidates : [])
+          .map((id) => byId.get(String(id)))
+          .filter((c): c is Candidate => Boolean(c))
+          // Official sources first, so the per-item cap never drops them.
+          .sort((a, b) => Number(b.kind === 'official') - Number(a.kind === 'official'));
         const extra = (Array.isArray(item.extraUrls) ? item.extraUrls : []).filter((u): u is string => typeof u === 'string' && /^https:\/\//.test(u)).slice(0, 2);
         return { type: item.type === 'brief' ? ('brief' as const) : ('story' as const), chosen, extra };
       })
@@ -154,10 +164,16 @@ export async function runPipeline(env: Env, options: { trigger: 'cron' | 'manual
 
     // 3. Fetch every source we will hand to the writer.
     report.step = 'fetching sources';
-    const urls = items.flatMap((item) => [...item.chosen.map((c) => c.link), ...item.extra].slice(0, MAX_SOURCES_PER_ITEM));
+    const urls = items.flatMap((item) => [...item.chosen.map((c) => c.link), ...item.extra].slice(0, MAX_SOURCES_PER_ITEM)).slice(0, MAX_SOURCE_FETCHES);
     const { snapshots, failures } = await fetchSnapshots(env, urls);
     report.sourcesFetched = snapshots.size;
     report.sourceFailures = failures;
+    // Logos and site-default share images are not news pictures: forget them before writing.
+    const generic = await genericImages(env, [...snapshots.values()], NO_IMAGE_HOSTS);
+    report.genericImages = generic.size;
+    snapshots.forEach((snap, url) => {
+      if (snap.image && generic.has(snap.image)) snapshots.set(url, { ...snap, image: null });
+    });
     const candidateByUrl = new Map(candidates.map((c) => [c.link, c]));
     const writeItems: WriteItem[] = items
       .map((item) => ({

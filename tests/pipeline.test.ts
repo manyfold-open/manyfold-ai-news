@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { parseFeed } from '../src/worker/pipeline/feeds';
-import { canonical, checkDraft, checkStory, numbersIn, quoteFound } from '../src/worker/pipeline/checks';
+import { NO_IMAGE_HOSTS, parseFeed, parseNewsroom } from '../src/worker/pipeline/feeds';
+import { looksLikeDefaultImage } from '../src/worker/pipeline/snapshot';
+import { canonical, checkDraft, checkStory, extraQuantities, numbersIn, quantities, quoteFound } from '../src/worker/pipeline/checks';
 import { extractJson, readDraft, type DraftStory } from '../src/worker/pipeline/draft';
 import { assembleIssue, checkTranslation, sourceLine, translationEntries } from '../src/worker/pipeline/assemble';
 import { issueDateFor, windowFor } from '../src/worker/pipeline/run';
@@ -65,6 +66,46 @@ describe('parseFeed', () => {
   it('reads Atom entries with link href', () => {
     const xml = `<feed><entry><title>Atom post</title><link rel="alternate" href="https://b.example/2"/><updated>2026-10-09T14:25:43+00:00</updated><summary>Short</summary></entry></feed>`;
     expect(parseFeed(xml)[0]).toMatchObject({ title: 'Atom post', link: 'https://b.example/2', published: '2026-10-09T14:25:43.000Z' });
+  });
+});
+
+describe('parseNewsroom', () => {
+  it('reads dated article cards from a listing page and skips labels', () => {
+    const html = `
+      <a href="/news/cyber-verification-program" class="grid"><span>Announcements</span><time>Oct 6, 2026</time><h3>Expanding the Cyber Verification Program</h3><p>We’re launching a new version.</p></a>
+      <a href="/news/2026-usage-policy-update" class="list"><span>Oct 8, 2026</span><span>Announcements</span><span>2026 Usage Policy update</span></a>
+      <a href="/news/2026-usage-policy-update" class="list">duplicate</a>
+      <a href="/careers">Careers</a>
+      <a href="/news/no-date"><span>Undated card</span></a>`;
+    const items = parseNewsroom(html, 'https://www.anthropic.com', /^\/news\/[a-z0-9-]+$/);
+    expect(items).toHaveLength(2);
+    expect(items[0]).toEqual({
+      title: 'Expanding the Cyber Verification Program',
+      link: 'https://www.anthropic.com/news/cyber-verification-program',
+      published: '2026-10-06T12:00:00.000Z',
+      summary: 'We’re launching a new version.',
+    });
+    expect(items[1].title).toBe('2026 Usage Policy update');
+  });
+
+  it('accepts absolute links and full month names', () => {
+    const html = `<a href="https://ai.meta.com/blog/introducing-muse-spark/" data-x="1"><div>Research</div><div>Introducing Muse Spark 1.1</div><div>July 9, 2026</div></a>`;
+    const [item] = parseNewsroom(html, 'https://ai.meta.com', /^(https:\/\/ai\.meta\.com)?\/blog\/[a-z0-9-]+\/?$/);
+    expect(item).toMatchObject({ title: 'Introducing Muse Spark 1.1', link: 'https://ai.meta.com/blog/introducing-muse-spark/', published: '2026-07-09T12:00:00.000Z' });
+  });
+});
+
+describe('share images', () => {
+  it('recognizes site-default and logo images by name', () => {
+    expect(looksLikeDefaultImage('https://cdn.example/68309ab48369f7ad9b4a40e1_open-graph.jpg')).toBe(true);
+    expect(looksLikeDefaultImage('https://storage.example/images/SocialShare_gradient.max-1440x810.jpg')).toBe(true);
+    expect(looksLikeDefaultImage('https://www.example.com/api/opengraph-illustration?name=Hand%20Lock')).toBe(true);
+    expect(looksLikeDefaultImage('https://storage.example/images/CloudGeminiAgent_hero.max-1440x810.png')).toBe(false);
+  });
+
+  it('never takes images from sites that only publish logos', () => {
+    expect(NO_IMAGE_HOSTS.has('www.anthropic.com')).toBe(true);
+    expect(NO_IMAGE_HOSTS.has('blog.google')).toBe(false);
   });
 });
 
@@ -154,6 +195,26 @@ describe('agent output', () => {
   it('coerces a loose draft and gives every story a unique id', () => {
     const draft = readDraft({ stories: [{ title: 'Same title' }, { title: 'Same title' }], briefs: [], today: [] });
     expect(new Set(draft.stories.map((s) => s.id)).size).toBe(2);
+  });
+});
+
+describe('check 3: quantities', () => {
+  it('treats unit conversions, month names and number words as the same value', () => {
+    expect(extraQuantities('Arena raises $200 million at a $3.1 billion valuation', 'Arena 融资 2 亿美元，估值达 31 亿美元')).toEqual([]);
+    expect(extraQuantities('seeking more than $250 million', '索赔超过 2.5 亿美元')).toEqual([]);
+    expect(extraQuantities('takes effect on November 12', '将于 11 月 12 日生效')).toEqual([]);
+    expect(extraQuantities('dismissed three researchers', '解雇了 3 名研究人员')).toEqual([]);
+    expect(extraQuantities('a 70B model', '700 亿参数模型')).toEqual([]);
+    expect(extraQuantities('30 million users', '3,000 万用户')).toEqual([]);
+  });
+
+  it('still flags a value the English never stated', () => {
+    expect(extraQuantities('saves 30%', '节省 40%')).toEqual([40]);
+    expect(extraQuantities('$200 million', '20 亿美元')).toEqual([2e9]);
+  });
+
+  it('reads English scales and suffixes', () => {
+    expect(quantities('$3.1 billion, 70B, 1,200 devs, 5 minutes', 'en')).toEqual([3.1e9, 7e10, 1200, 5]);
   });
 });
 

@@ -1,7 +1,9 @@
 /**
- * Where candidate stories come from: a fixed list of feeds (checked by hand to return
- * real RSS/Atom), parsed with a small tolerant parser. Agent-suggested sources are not
- * collected here; whatever the agent cites is fetched and checked later.
+ * Where candidate stories come from: a fixed list of feeds (each checked by hand), parsed
+ * with small tolerant parsers. Most are RSS/Atom; a few official newsrooms publish no feed,
+ * so their listing page is read instead ("newsroom": each article link with a date).
+ * Agent-suggested sources are not collected here; whatever the agent cites is fetched and
+ * checked later.
  */
 
 import type { RegionKey, SourceKind } from '../../shared/issue';
@@ -16,6 +18,10 @@ export interface FeedSource {
   region: RegionKey;
   /** For general tech feeds: keep only items whose title matches. */
   filter?: RegExp;
+  /** A listing page instead of a feed: article links matching `links` under `base`. */
+  newsroom?: { base: string; links: RegExp };
+  /** false when the site's share images are only logos or stock illustrations. */
+  images?: boolean;
 }
 
 const AI_EN = /\b(AI|A\.I\.|artificial intelligence|model|LLM|chip|GPU|agent|OpenAI|Anthropic|DeepSeek|Qwen|Gemini|Nvidia|robot)/i;
@@ -25,6 +31,10 @@ export const FEEDS: FeedSource[] = [
   { id: 'openai', name: { en: 'OpenAI', zh: 'OpenAI' }, url: 'https://openai.com/news/rss.xml', kind: 'official', lang: 'en', region: 'us' },
   { id: 'deepmind', name: { en: 'Google DeepMind blog', zh: 'Google DeepMind 博客' }, url: 'https://deepmind.google/blog/rss.xml', kind: 'official', lang: 'en', region: 'eu' },
   { id: 'google-ai', name: { en: 'Google AI blog', zh: 'Google AI 博客' }, url: 'https://blog.google/technology/ai/rss/', kind: 'official', lang: 'en', region: 'us' },
+  { id: 'google', name: { en: 'Google blog', zh: 'Google 官方博客' }, url: 'https://blog.google/rss/', kind: 'official', lang: 'en', region: 'us', filter: AI_EN },
+  { id: 'anthropic', name: { en: 'Anthropic', zh: 'Anthropic' }, url: 'https://www.anthropic.com/news', kind: 'official', lang: 'en', region: 'us', images: false, newsroom: { base: 'https://www.anthropic.com', links: /^\/news\/[a-z0-9-]+$/ } },
+  { id: 'meta-ai', name: { en: 'Meta AI blog', zh: 'Meta AI 博客' }, url: 'https://ai.meta.com/blog/', kind: 'official', lang: 'en', region: 'us', newsroom: { base: 'https://ai.meta.com', links: /^(https:\/\/ai\.meta\.com)?\/blog\/[a-z0-9-]+\/?$/ } },
+  { id: 'mistral', name: { en: 'Mistral AI', zh: 'Mistral AI' }, url: 'https://mistral.ai/news/rss', kind: 'official', lang: 'en', region: 'eu' },
   { id: 'nvidia', name: { en: 'NVIDIA blog', zh: 'NVIDIA 博客' }, url: 'https://blogs.nvidia.com/feed/', kind: 'official', lang: 'en', region: 'us', filter: AI_EN },
   { id: 'huggingface', name: { en: 'Hugging Face blog', zh: 'Hugging Face 博客' }, url: 'https://huggingface.co/blog/feed.xml', kind: 'official', lang: 'en', region: 'us' },
   { id: 'techcrunch', name: { en: 'TechCrunch', zh: 'TechCrunch' }, url: 'https://techcrunch.com/category/artificial-intelligence/feed/', kind: 'reported', lang: 'en', region: 'us' },
@@ -53,6 +63,9 @@ export interface Candidate extends FeedItem {
   region: RegionKey;
   published: string;
 }
+
+/** Hosts whose share images are never news pictures (see FeedSource.images). */
+export const NO_IMAGE_HOSTS = new Set(FEEDS.filter((f) => f.images === false).map((f) => new URL(f.url).hostname));
 
 /* ───────── parsing ───────── */
 
@@ -119,6 +132,37 @@ export function parseFeed(xml: string): FeedItem[] {
   return items;
 }
 
+const MONTHS = 'Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?';
+const LISTING_DATE = new RegExp(`\\b(?:${MONTHS})\\.? \\d{1,2}, \\d{4}\\b`);
+const LABEL = /^(announcements?|featured|latest news|news|product|products|policy|research|open source|company|societal impacts|interpretability|alignment|case study|customer stories|read more|learn more)$/i;
+
+/**
+ * Reads a newsroom listing page: every link to an article whose card carries a date like
+ * "Oct 8, 2026". The title is the first text in the card that is not the date or a label.
+ */
+export function parseNewsroom(html: string, base: string, links: RegExp): FeedItem[] {
+  const items: FeedItem[] = [];
+  const seen = new Set<string>();
+  for (const match of html.matchAll(/<a\b[^>]*\bhref=["']([^"'#?]+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
+    const href = decodeEntities(match[1]);
+    if (!links.test(href)) continue;
+    const link = new URL(href, base).toString();
+    if (seen.has(link)) continue;
+    const parts = match[2]
+      .split(/<[^>]+>/)
+      .map((t) => decodeEntities(t).replace(/\s+/g, ' ').trim())
+      .filter(Boolean);
+    const date = parts.map((p) => p.match(LISTING_DATE)?.[0]).find(Boolean);
+    const text = parts.filter((p) => !LISTING_DATE.test(p) && !LABEL.test(p) && p.length > 3);
+    if (!date || text.length === 0) continue;
+    const parsed = Date.parse(`${date.replace('.', '')} 12:00 UTC`);
+    if (Number.isNaN(parsed)) continue;
+    seen.add(link);
+    items.push({ title: text[0].slice(0, 300), link, published: new Date(parsed).toISOString(), summary: (text[1] ?? '').slice(0, 700) });
+  }
+  return items;
+}
+
 /* ───────── collecting ───────── */
 
 export interface FeedResult {
@@ -141,7 +185,8 @@ export async function collectCandidates(window: { from: Date; to: Date }): Promi
           FEED_TIMEOUT_MS,
         );
         if (!response.ok) return { result: { feed: feed.id, items: 0, error: `HTTP ${response.status}` }, items: [] };
-        const items = parseFeed(await response.text())
+        const body = await response.text();
+        const items = (feed.newsroom ? parseNewsroom(body, feed.newsroom.base, feed.newsroom.links) : parseFeed(body))
           .filter((item) => item.published && Date.parse(item.published) >= window.from.getTime() && Date.parse(item.published) <= window.to.getTime())
           .filter((item) => !feed.filter || feed.filter.test(item.title))
           .slice(0, PER_FEED);

@@ -48,6 +48,47 @@ export function numbersIn(value: string): string[] {
   return found.map((n) => (/^\d{1,3}(,\d{3})+$/.test(n) ? n.replace(/,/g, '') : n.replace(/,/g, '.')));
 }
 
+const NUMBER_WORDS: Record<string, number> = {
+  one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12,
+};
+const MONTH_NUMBERS: Record<string, number> = {
+  january: 1, february: 2, march: 3, april: 4, may: 5, june: 6, july: 7, august: 8, september: 9, october: 10, november: 11, december: 12,
+};
+const EN_SCALE: Record<string, number> = { thousand: 1e3, million: 1e6, billion: 1e9, trillion: 1e12, bn: 1e9, k: 1e3, m: 1e6, b: 1e9 };
+const ZH_SCALE: Record<string, number> = { 千: 1e3, 万: 1e4, 百万: 1e6, 千万: 1e7, 亿: 1e8, 万亿: 1e12 };
+
+/**
+ * The values a text states, with units applied, so "$200 million" and "2 亿美元" compare
+ * equal. English month names and small number words count too ("November 12" → 11, 12).
+ */
+export function quantities(value: string, lang: 'en' | 'zh'): number[] {
+  let text = plainText(value).normalize('NFKC');
+  if (lang === 'en') {
+    text = text
+      .replace(/\b(january|february|march|april|may|june|july|august|september|october|november|december)\b/gi, (m) => ` ${MONTH_NUMBERS[m.toLowerCase()]} `)
+      .replace(/\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b/gi, (m) => ` ${NUMBER_WORDS[m.toLowerCase()]} `);
+  }
+  const pattern = lang === 'en' ? /(\d+(?:[.,]\d+)*)\s*(thousand|million|billion|trillion|bn|[kmb])?\b/gi : /(\d+(?:[.,]\d+)*)\s*(万亿|千万|百万|千|万|亿)?/g;
+  const out: number[] = [];
+  for (const match of text.matchAll(pattern)) {
+    const raw = match[1];
+    const n = Number(/^\d{1,3}(,\d{3})+$/.test(raw) ? raw.replace(/,/g, '') : raw.replace(/,/g, '.'));
+    if (!Number.isFinite(n)) continue;
+    const unit = match[2]?.toLowerCase();
+    const scale = unit ? (lang === 'en' ? EN_SCALE[unit] : ZH_SCALE[unit]) ?? 1 : 1;
+    out.push(n * scale);
+  }
+  return out;
+}
+
+const sameValue = (a: number, b: number): boolean => Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(a), Math.abs(b));
+
+/** Values the Chinese states that the English does not. Empty means the numbers agree. */
+export function extraQuantities(en: string, zh: string): number[] {
+  const english = quantities(en, 'en');
+  return [...new Set(quantities(zh, 'zh').filter((v) => !english.some((e) => sameValue(e, v))))];
+}
+
 export const BANNED = ['game-changer', 'game changer', 'revolutionary', 'shocking', 'insane', 'mind-blowing', 'breaking', 'groundbreaking', 'unprecedented', 'jaw-dropping'];
 
 function bannedIn(value: string): string | null {
