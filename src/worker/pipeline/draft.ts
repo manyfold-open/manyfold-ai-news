@@ -105,6 +105,15 @@ function slug(value: string, index: number): string {
   return s || `story-${index + 1}`;
 }
 
+/**
+ * Repairs the two marker typos models make, a closing tag missing its ">" or its "/":
+ * "<m0>$250 million</m0 in damages" would otherwise leave a stray "0" that check 1
+ * rejects. Only the tag syntax changes; the words and numbers stay as written.
+ */
+export function repairMarkers(value: string): string {
+  return value.replace(/<\/m(\d+)(?![\d>])/g, '</m$1>').replace(/<m(\d+)>([^<]*?)<m\1>/g, '<m$1>$2</m$1>');
+}
+
 /** Strips a ```json fence or surrounding prose and parses the first JSON object. */
 export function extractJson(raw: string): unknown {
   const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
@@ -135,7 +144,7 @@ export function readDraft(raw: unknown): Draft {
       lat: num(s.lat),
       category: pick(s.category, CATEGORIES, 'Companies'),
       title: text(s.title),
-      summary: text(s.summary),
+      summary: repairMarkers(text(s.summary)),
       why: text(s.why),
       next: optText(s.next),
       sources: list(s.sources).map((src) => {

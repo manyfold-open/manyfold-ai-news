@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { NO_IMAGE_HOSTS, parseFeed, parseNewsroom } from '../src/worker/pipeline/feeds';
 import { looksLikeDefaultImage } from '../src/worker/pipeline/snapshot';
 import { canonical, checkDraft, checkStory, extraQuantities, numbersIn, quantities, quoteFound } from '../src/worker/pipeline/checks';
-import { extractJson, readDraft, type DraftStory } from '../src/worker/pipeline/draft';
+import { extractJson, readDraft, repairMarkers, type DraftStory } from '../src/worker/pipeline/draft';
 import { assembleIssue, checkTranslation, sourceLine, translationEntries } from '../src/worker/pipeline/assemble';
 import { issueDateFor, windowFor } from '../src/worker/pipeline/run';
 import { applyReview, readReview } from '../src/worker/pipeline/review';
@@ -271,6 +271,14 @@ describe('check 2: review', () => {
 describe('agent output', () => {
   it('extracts JSON from a fenced reply', () => {
     expect(extractJson('Here you go:\n```json\n{"items":[1]}\n```')).toEqual({ items: [1] });
+  });
+
+  it('repairs a closing marker missing its ">" or "/", and nothing else', () => {
+    expect(repairMarkers('seeks more than <m0>$250 million</m0 in damages.')).toBe('seeks more than <m0>$250 million</m0> in damages.');
+    expect(repairMarkers('raised <m1>$2 billion<m1> today')).toBe('raised <m1>$2 billion</m1> today');
+    expect(repairMarkers('<m0>one</m0> and <m10>two</m10>')).toBe('<m0>one</m0> and <m10>two</m10>');
+    const draft = readDraft({ stories: [{ title: 'T', summary: 'Costs <m0>$5</m0 a month.' }] });
+    expect(draft.stories[0].summary).toBe('Costs <m0>$5</m0> a month.');
   });
 
   it('coerces a loose draft and gives every story a unique id', () => {

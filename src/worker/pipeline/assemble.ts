@@ -7,7 +7,7 @@
 
 import type { Brief, ChartRow, Issue, L10n, Place, Quote, RegionKey, Source, Story, Visual } from '../../shared/issue';
 import { tokenize } from '../../shared/issue';
-import type { Draft, DraftQuote, DraftStory } from './draft';
+import { repairMarkers, type Draft, type DraftQuote, type DraftStory } from './draft';
 import { extraQuantities } from './checks';
 
 const CATEGORY_ZH: Record<string, string> = {
@@ -88,12 +88,12 @@ export function checkTranslation(key: string, en: string, zh: string | undefined
     warnings.push(`${key}: no Chinese translation; the English text is used.`);
     return en;
   }
-  let out = zh;
+  let out = repairMarkers(zh);
   const marks = (s: string) => tokenize(s).filter((t) => t.type === 'mark').map((t) => (t.type === 'mark' ? t.index : -1)).sort().join(',');
   const cites = (s: string) => tokenize(s).filter((t) => t.type === 'cite').map((t) => (t.type === 'cite' ? t.n : -1)).sort().join(',');
   if (marks(en) !== marks(out)) {
     warnings.push(`${key}: the translation changed the checked-number markers; highlights removed in Chinese.`);
-    out = out.replace(/<\/?m\d+>/g, '');
+    out = out.replace(/<\/?m\d+>?/g, '');
   }
   if (cites(en) !== cites(out) && cites(en) !== '') {
     warnings.push(`${key}: the translation changed the citations; citation numbers removed in Chinese.`);

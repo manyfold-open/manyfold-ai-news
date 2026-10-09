@@ -6,7 +6,7 @@
  * not hold. It fails closed: an item the reviewer did not judge is cut.
  */
 
-import type { Draft, DraftBrief, DraftStory } from './draft';
+import { repairMarkers, type Draft, type DraftBrief, type DraftStory } from './draft';
 import { checkDraft, type SourceText } from './checks';
 
 export type Verdict = 'pass' | 'fix' | 'cut';
@@ -59,7 +59,7 @@ export function readReview(raw: unknown): ReviewReply {
     const verdict = item.verdict === 'pass' || item.verdict === 'fix' ? item.verdict : 'cut';
     const fix: Record<string, string> = {};
     Object.entries(obj(item.fix)).forEach(([key, value]) => {
-      if (text(value)) fix[key] = text(value);
+      if (text(value)) fix[key] = repairMarkers(text(value));
     });
     verdicts.set(id, {
       id,
