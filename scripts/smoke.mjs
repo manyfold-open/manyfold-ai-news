@@ -41,12 +41,16 @@ const checks = [
     },
   },
   {
-    name: 'unknown /api/* routes return JSON 404',
+    // With ADMIN_PASSWORD set, the admin gate answers first and does not reveal which
+    // routes exist, so an unknown route is a 401 there and a 404 everywhere else.
+    name: 'unknown /api/* routes return JSON 404 (401 behind the admin password)',
     run: async () => {
+      const state = await (await fetch(`${base}/api/state`)).json();
+      const [status, code] = state?.adminRequired ? [401, 'admin_password_invalid'] : [404, 'not_found'];
       const response = await fetch(`${base}/api/definitely-not-a-route`);
-      if (response.status !== 404) throw new Error(`HTTP ${response.status}, expected 404`);
+      if (response.status !== status) throw new Error(`HTTP ${response.status}, expected ${status}`);
       const body = await response.json();
-      if (body?.error?.code !== 'not_found') throw new Error(`unexpected body: ${JSON.stringify(body)}`);
+      if (body?.error?.code !== code) throw new Error(`unexpected body: ${JSON.stringify(body)}`);
     },
   },
 ];
