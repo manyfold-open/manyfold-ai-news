@@ -92,6 +92,26 @@ export async function saveIssue(env: Env, date: string, raw: unknown, status: Is
   return issue;
 }
 
+/** Any issue, draft or published, for the owner's preview. */
+export async function getAnyIssue(env: Env, date: string): Promise<{ issue: Issue; status: string } & IssueResponse> {
+  const row = await env.DB.prepare('SELECT date, status, data FROM issues WHERE date = ?').bind(assertDate(date)).first<IssueRow & { status: string }>();
+  if (!row) throw new HttpError(404, 'issue_not_found', 'There is no issue for that date.');
+  const response = await respond(env, row);
+  return { ...response, issue: response.issue!, status: row.status };
+}
+
+export async function setIssueStatus(env: Env, date: string, status: IssueStatus): Promise<void> {
+  const at = now();
+  const result = await env.DB.prepare(
+    `UPDATE issues SET status = ?, updated_at = ?,
+       published_at = CASE WHEN ? = 'published' THEN COALESCE(published_at, ?) ELSE published_at END
+     WHERE date = ?`,
+  )
+    .bind(status, at, status, at, assertDate(date))
+    .run();
+  if (!result.meta.changes) throw new HttpError(404, 'issue_not_found', 'There is no issue for that date.');
+}
+
 /* ───────── local development ───────── */
 
 let seeded: Promise<void> | null = null;

@@ -9,7 +9,7 @@ import type { Issue, IssueResponse, Lang } from '../../shared/issue';
 import { COPY, localDate } from './i18n';
 import Masthead from './Masthead';
 import { AboutPage, ArchivePage, EmptyState, IssuePage, Message } from './pages';
-import { ReaderError, fetchIssue, fetchLatest } from './data';
+import { ReaderError, fetchDraft, fetchIssue, fetchLatest } from './data';
 import { navigate, pathFor, preferredLang, useRoute } from './router';
 import './reader.css';
 
@@ -34,7 +34,7 @@ function loadFonts() {
 
 type Load =
   | { state: 'loading' }
-  | { state: 'ready'; data: IssueResponse & { issue: Issue } }
+  | { state: 'ready'; data: IssueResponse & { issue: Issue }; draft: boolean }
   | { state: 'empty' }
   | { state: 'missing' }
   | { state: 'failed' };
@@ -56,15 +56,17 @@ export default function ReaderApp() {
   }, [route.name, lang]);
 
   const issueKey = route.name === 'today' ? 'today' : route.name === 'issue' ? route.date : null;
+  const preview = route.name === 'issue' && new URLSearchParams(location.search).get('preview') === '1';
 
   useEffect(() => {
     if (!issueKey) return;
     let live = true;
     setLoad({ state: 'loading' });
-    (issueKey === 'today' ? fetchLatest(localDate()) : fetchIssue(issueKey))
+    (issueKey === 'today' ? fetchLatest(localDate()) : preview ? fetchDraft(issueKey) : fetchIssue(issueKey))
       .then((data) => {
         if (!live) return;
-        if (data.issue) setLoad({ state: 'ready', data: { ...data, issue: data.issue } });
+        const draft = 'status' in data && data.status !== 'published';
+        if (data.issue) setLoad({ state: 'ready', data: { ...data, issue: data.issue }, draft });
         else setLoad({ state: issueKey === 'today' ? 'empty' : 'missing' });
       })
       .catch((error) => {
@@ -73,7 +75,7 @@ export default function ReaderApp() {
     return () => {
       live = false;
     };
-  }, [issueKey, attempt]);
+  }, [issueKey, preview, attempt]);
 
   const T = COPY[lang];
   if (route.name === 'root') return null;
@@ -92,6 +94,11 @@ export default function ReaderApp() {
   const issue = load.state === 'ready' ? load.data.issue : null;
   return (
     <>
+      {load.state === 'ready' && load.draft && (
+        <p className="preview-banner" role="status">
+          Draft preview. Readers can’t see this issue until it is published in /admin.
+        </p>
+      )}
       <Masthead lang={lang} route={route} issue={issue} />
       {load.state === 'ready' && <IssuePage data={load.data} lang={lang} story={route.name === 'issue' ? route.story : null} />}
       {load.state === 'empty' && <EmptyState lang={lang} />}

@@ -1,0 +1,265 @@
+/**
+ * The daily pipeline: collect → pick (agent) → fetch sources → write (agent) →
+ * check 1 (code) → translate (agent) → check 3 (code) → save as a DRAFT.
+ *
+ * Nothing here publishes. While the pipeline is in its trial period every issue stays
+ * a draft until the owner reads it and publishes it from /admin. Check 2 (an independent
+ * review agent) is not connected yet; the run report says so.
+ *
+ * Each run is one row in pipeline_runs; its id seeds the A2A messageIds, so retrying a
+ * step of the same run cannot bill twice. Three agent turns per run, all billed.
+ */
+
+import type { Env } from '../types';
+import { ensureSchema, getSetting, now, setSetting } from '../db';
+import { listConnectedAgents, credentialFor } from '../connect';
+import { safeErrorText } from '../a2a';
+import { saveIssue } from '../issues';
+import { validateIssue } from '../../shared/issue';
+import { collectCandidates, type Candidate, type FeedResult } from './feeds';
+import { fetchSnapshots, type Snapshot } from './snapshot';
+import { selectPrompt, translatePrompt, writePrompt, type WriteItem } from './prompts';
+import { agentTurn } from './agent';
+import { extractJson, readDraft } from './draft';
+import { checkDraft, type ItemCheck } from './checks';
+import { assembleIssue, translationEntries } from './assemble';
+
+export const WRITER_AGENT_KEY = 'pipeline_writer_agent';
+
+export interface RunReport {
+  issueDate: string;
+  agent: string | null;
+  window: { from: string; to: string };
+  feeds: FeedResult[];
+  candidates: number;
+  picked: number;
+  sourcesFetched: number;
+  sourceFailures: { url: string; error: string }[];
+  checks: ItemCheck[];
+  review: string;
+  translationWarnings: string[];
+  stories: number;
+  briefs: number;
+  saved: 'draft' | null;
+  durationMs: number;
+  step: string;
+}
+
+const MIN_STORIES = 3;
+const MAX_SOURCES_PER_ITEM = 3;
+
+/** The issue a run started now prepares: the morning after 19:30 UTC, today before it. */
+export function issueDateFor(at: Date): string {
+  return new Date(at.getTime() + 4.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+/** News window: since the previous run, or since Friday's for a Monday issue. */
+export function windowFor(issueDate: string, at: Date): { from: Date; to: Date } {
+  const monday = new Date(`${issueDate}T00:00:00Z`).getUTCDay() === 1;
+  return { from: new Date(at.getTime() - (monday ? 72 : 30) * 60 * 60 * 1000), to: at };
+}
+
+export async function writerAgentId(env: Env): Promise<string | null> {
+  const chosen = await getSetting(env, WRITER_AGENT_KEY);
+  const agents = await listConnectedAgents(env);
+  if (chosen && agents.some((a) => a.agentId === chosen)) return chosen;
+  return agents.length === 1 ? agents[0].agentId : null;
+}
+
+export const setWriterAgent = (env: Env, agentId: string) => setSetting(env, WRITER_AGENT_KEY, agentId);
+
+async function recentUrls(env: Env, issueDate: string): Promise<Set<string>> {
+  const since = new Date(Date.parse(`${issueDate}T00:00:00Z`) - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const { results } = await env.DB.prepare('SELECT data FROM issues WHERE date >= ? AND date < ?').bind(since, issueDate).all<{ data: string }>();
+  const urls = new Set<string>();
+  for (const row of results) {
+    const issue = JSON.parse(row.data) as { stories: { sources: { url: string }[] }[] };
+    issue.stories.forEach((s) => s.sources.forEach((src) => urls.add(src.url)));
+  }
+  return urls;
+}
+
+async function nextNumber(env: Env, issueDate: string): Promise<number> {
+  const existing = await env.DB.prepare('SELECT number FROM issues WHERE date = ?').bind(issueDate).first<{ number: number }>();
+  if (existing) return existing.number;
+  const row = await env.DB.prepare('SELECT MAX(number) AS n FROM issues').first<{ n: number | null }>();
+  return (row?.n ?? 0) + 1;
+}
+
+async function finish(env: Env, runId: string, status: 'drafted' | 'failed', report: RunReport, error: string | null): Promise<void> {
+  await env.DB.prepare('UPDATE pipeline_runs SET status = ?, report = ?, error = ?, finished_at = ? WHERE id = ?')
+    .bind(status, JSON.stringify(report), error, now(), runId)
+    .run();
+}
+
+export async function runPipeline(env: Env, options: { trigger: 'cron' | 'manual'; at?: Date; issueDate?: string }): Promise<{ runId: string; status: 'drafted' | 'failed'; report: RunReport }> {
+  await ensureSchema(env.DB);
+  const at = options.at ?? new Date();
+  const started = Date.now();
+  const issueDate = options.issueDate ?? issueDateFor(at);
+  const window = windowFor(issueDate, at);
+  const attempt = await env.DB.prepare('SELECT COUNT(*) AS n FROM pipeline_runs WHERE issue_date = ?').bind(issueDate).first<{ n: number }>();
+  const runId = `${issueDate}-${(attempt?.n ?? 0) + 1}`;
+  await env.DB.prepare("INSERT INTO pipeline_runs (id, issue_date, trigger, status, started_at) VALUES (?, ?, ?, 'running', ?)")
+    .bind(runId, issueDate, options.trigger, now())
+    .run();
+
+  const report: RunReport = {
+    issueDate,
+    agent: null,
+    window: { from: window.from.toISOString(), to: window.to.toISOString() },
+    feeds: [],
+    candidates: 0,
+    picked: 0,
+    sourcesFetched: 0,
+    sourceFailures: [],
+    checks: [],
+    review: 'Check 2 (independent review agent) is not connected yet; drafts have passed checks 1 and 3 only.',
+    translationWarnings: [],
+    stories: 0,
+    briefs: 0,
+    saved: null,
+    durationMs: 0,
+    step: 'starting',
+  };
+
+  try {
+    const agentId = await writerAgentId(env);
+    if (!agentId) throw new Error('No writer agent is set. Choose one in /admin under Issues.');
+    const cred = await credentialFor(env, agentId);
+    report.agent = cred.label;
+
+    // 1. Collect candidates from the feeds.
+    report.step = 'collecting';
+    const { candidates, feeds } = await collectCandidates(window);
+    report.feeds = feeds;
+    report.candidates = candidates.length;
+    if (candidates.length === 0) throw new Error('No candidate stories in the window.');
+
+    // 2. The agent picks (billed turn 1).
+    report.step = 'picking';
+    const picked = extractJson(await agentTurn(cred, `aiin5-${runId}-pick`, selectPrompt(issueDate, candidates))) as { items?: unknown[] };
+    const byId = new Map(candidates.map((c) => [c.id, c]));
+    const items = (Array.isArray(picked.items) ? picked.items : [])
+      .slice(0, 10)
+      .map((raw) => {
+        const item = (raw ?? {}) as { type?: unknown; candidates?: unknown; extraUrls?: unknown };
+        const chosen = (Array.isArray(item.candidates) ? item.candidates : []).map((id) => byId.get(String(id))).filter((c): c is Candidate => Boolean(c));
+        const extra = (Array.isArray(item.extraUrls) ? item.extraUrls : []).filter((u): u is string => typeof u === 'string' && /^https:\/\//.test(u)).slice(0, 2);
+        return { type: item.type === 'brief' ? ('brief' as const) : ('story' as const), chosen, extra };
+      })
+      .filter((item) => item.chosen.length > 0 || item.extra.length > 0);
+    report.picked = items.length;
+    if (items.length === 0) throw new Error('The agent picked nothing usable.');
+
+    // 3. Fetch every source we will hand to the writer.
+    report.step = 'fetching sources';
+    const urls = items.flatMap((item) => [...item.chosen.map((c) => c.link), ...item.extra].slice(0, MAX_SOURCES_PER_ITEM));
+    const { snapshots, failures } = await fetchSnapshots(env, urls);
+    report.sourcesFetched = snapshots.size;
+    report.sourceFailures = failures;
+    const candidateByUrl = new Map(candidates.map((c) => [c.link, c]));
+    const writeItems: WriteItem[] = items
+      .map((item) => ({
+        type: item.type,
+        sources: [...item.chosen.map((c) => c.link), ...item.extra]
+          .slice(0, MAX_SOURCES_PER_ITEM)
+          .map((url): WriteItem['sources'][number] | null => {
+            const snapshot = snapshots.get(url);
+            const c = candidateByUrl.get(url);
+            if (!snapshot || snapshot.text.length < 200) return null;
+            return { url, name: c?.sourceName.en ?? new URL(url).hostname, kind: c?.kind ?? 'official', lang: c?.lang ?? 'en', published: c?.published ?? null, snapshot };
+          })
+          .filter((s): s is WriteItem['sources'][number] => s !== null),
+      }))
+      .filter((item) => item.sources.length > 0);
+    if (writeItems.length === 0) throw new Error('None of the picked sources could be read.');
+
+    // 4. The agent writes the English master (billed turn 2).
+    report.step = 'writing';
+    const draft = readDraft(extractJson(await agentTurn(cred, `aiin5-${runId}-write`, writePrompt(issueDate, writeItems))));
+
+    // 5. Check 1: code checks every quote and number against the fetched texts.
+    report.step = 'checking';
+    const texts = new Map<string, Snapshot>();
+    snapshots.forEach((s, url) => texts.set(url, s));
+    const checked = checkDraft(draft, texts, await recentUrls(env, issueDate));
+    report.checks = checked.checks;
+    if (checked.draft.stories.length < MIN_STORIES) throw new Error(`Only ${checked.draft.stories.length} stories passed the checks; at least ${MIN_STORIES} are needed.`);
+
+    // 6. The agent translates (billed turn 3); check 3 runs while assembling.
+    report.step = 'translating';
+    const sourceNamesZh = new Map(candidates.map((c) => [c.link, c.sourceName.zh]));
+    const entries = translationEntries(checked.draft, sourceNamesZh);
+    const zh = extractJson(await agentTurn(cred, `aiin5-${runId}-translate`, translatePrompt(entries))) as Record<string, string>;
+    const images = new Map<string, string>();
+    snapshots.forEach((s, url) => s.image && images.set(url, s.image));
+    const { issue, warnings } = assembleIssue({ date: issueDate, number: await nextNumber(env, issueDate), draft: checked.draft, zh, sourceNamesZh, images });
+    report.translationWarnings = warnings;
+
+    // 7. Save as a draft. Never published from here.
+    report.step = 'saving';
+    validateIssue(issue);
+    const existing = await env.DB.prepare('SELECT status FROM issues WHERE date = ?').bind(issueDate).first<{ status: string }>();
+    if (existing?.status === 'published') throw new Error('An issue for this date is already published; the draft was not saved over it.');
+    await saveIssue(env, issueDate, issue, 'draft');
+    report.saved = 'draft';
+    report.stories = issue.stories.length;
+    report.briefs = issue.briefs.length;
+    report.step = 'done';
+    report.durationMs = Date.now() - started;
+    await finish(env, runId, 'drafted', report, null);
+    return { runId, status: 'drafted', report };
+  } catch (error) {
+    report.durationMs = Date.now() - started;
+    const message = safeErrorText(error instanceof Error ? error.message : error);
+    console.error('pipeline run failed', runId, report.step, message);
+    await finish(env, runId, 'failed', report, message);
+    return { runId, status: 'failed', report };
+  }
+}
+
+/** No agent, no billing: collect candidates and read a few sources, to check the plumbing. */
+export async function checkSources(env: Env, at = new Date()): Promise<{
+  window: { from: string; to: string };
+  feeds: FeedResult[];
+  candidates: { id: string; feed: string; title: string; published: string }[];
+  sources: { url: string; title: string; characters: number; image: boolean }[];
+  failures: { url: string; error: string }[];
+}> {
+  await ensureSchema(env.DB);
+  const window = windowFor(issueDateFor(at), at);
+  const { candidates, feeds } = await collectCandidates(window);
+  const sample = candidates.slice(0, 6).map((c) => c.link);
+  const { snapshots, failures } = await fetchSnapshots(env, sample);
+  return {
+    window: { from: window.from.toISOString(), to: window.to.toISOString() },
+    feeds,
+    candidates: candidates.map((c) => ({ id: c.id, feed: c.feed, title: c.title, published: c.published })),
+    sources: [...snapshots.values()].map((snap) => ({ url: snap.url, title: snap.title, characters: snap.text.length, image: Boolean(snap.image) })),
+    failures,
+  };
+}
+
+export async function listRuns(env: Env): Promise<{ id: string; issueDate: string; trigger: string; status: string; error: string | null; startedAt: string; finishedAt: string | null; stories: number; briefs: number }[]> {
+  const { results } = await env.DB.prepare('SELECT id, issue_date, trigger, status, error, started_at, finished_at, report FROM pipeline_runs ORDER BY started_at DESC LIMIT 30').all<{
+    id: string;
+    issue_date: string;
+    trigger: string;
+    status: string;
+    error: string | null;
+    started_at: string;
+    finished_at: string | null;
+    report: string;
+  }>();
+  return results.map((r) => {
+    const report = JSON.parse(r.report || '{}') as Partial<RunReport>;
+    return { id: r.id, issueDate: r.issue_date, trigger: r.trigger, status: r.status, error: r.error, startedAt: r.started_at, finishedAt: r.finished_at, stories: report.stories ?? 0, briefs: report.briefs ?? 0 };
+  });
+}
+
+export async function getRun(env: Env, id: string): Promise<{ id: string; status: string; error: string | null; report: RunReport | null } | null> {
+  const row = await env.DB.prepare('SELECT id, status, error, report FROM pipeline_runs WHERE id = ?').bind(id).first<{ id: string; status: string; error: string | null; report: string }>();
+  if (!row) return null;
+  return { id: row.id, status: row.status, error: row.error, report: row.report && row.report !== '{}' ? (JSON.parse(row.report) as RunReport) : null };
+}

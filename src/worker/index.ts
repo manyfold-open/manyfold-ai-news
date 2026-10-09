@@ -22,6 +22,15 @@
  *   POST   /api/reports                     open   "report a problem" (throttled)
  *   GET    /api/admin/issues                admin  every issue, drafts included
  *   PUT    /api/admin/issues/:date          admin  validate and store an issue, as draft or published
+ *   GET    /api/admin/issues/:date          admin  one issue in any status (draft preview)
+ *   POST   /api/admin/issues/:date/status   admin  publish or unpublish
+ *   GET    /api/admin/pipeline              admin  writer agent and recent runs
+ *   PUT    /api/admin/pipeline/agent        admin  choose the writer agent
+ *   GET    /api/admin/pipeline/sources      admin  read feeds and a few sources (no agent, free)
+ *   GET    /api/admin/pipeline/runs/:id     admin  one run report
+ *   POST   /api/admin/pipeline/run          admin  run the pipeline now (billed; needs confirm)
+ *
+ * The scheduled handler runs the pipeline daily at 19:30 UTC; it only saves drafts.
  *
  * "admin" routes require the x-admin-password header — but only when the
  * ADMIN_PASSWORD secret is set. Without it the app is open, which is what makes
@@ -45,7 +54,8 @@ import {
 } from './connect';
 import { getConversation, handleChatTurn, resetConversation } from './chat';
 import { IssueValidationError } from '../shared/issue';
-import { getIssue, getLatestIssue, listAllIssues, listIssues, saveIssue, seedSampleIssue } from './issues';
+import { getAnyIssue, getIssue, getLatestIssue, listAllIssues, listIssues, saveIssue, seedSampleIssue, setIssueStatus } from './issues';
+import { checkSources, getRun, listRuns, runPipeline, setWriterAgent, writerAgentId } from './pipeline/run';
 import { clientKey, recordFeedback, recordReport, subscribe } from './public';
 
 const SERVICE = 'cloudflare-worker-starter';
@@ -244,6 +254,47 @@ app.put('/api/admin/issues/:date', async (c) => {
   return c.json({ ok: true, date: issue.date, status });
 });
 
+app.get('/api/admin/issues/:date', async (c) => c.json(await getAnyIssue(c.env, c.req.param('date'))));
+
+app.post('/api/admin/issues/:date/status', async (c) => {
+  const body = await readBody(c);
+  const status = body?.status === 'published' ? 'published' : 'draft';
+  await setIssueStatus(c.env, c.req.param('date'), status);
+  return c.json({ ok: true, status });
+});
+
+/* ───────── admin: pipeline ───────── */
+
+app.get('/api/admin/pipeline', async (c) =>
+  c.json({ writerAgentId: await writerAgentId(c.env), runs: await listRuns(c.env) }),
+);
+
+app.put('/api/admin/pipeline/agent', async (c) => {
+  const body = await readBody(c);
+  const agentId = typeof body?.agentId === 'string' ? body.agentId : '';
+  const agents = await listConnectedAgents(c.env);
+  if (!agents.some((a) => a.agentId === agentId)) throw new HttpError(400, 'bad_request', 'That agent is not connected.');
+  await setWriterAgent(c.env, agentId);
+  return c.json({ ok: true });
+});
+
+// Free: reads the feeds and a few sources, never calls an agent.
+app.get('/api/admin/pipeline/sources', async (c) => c.json(await checkSources(c.env)));
+
+app.get('/api/admin/pipeline/runs/:id', async (c) => {
+  const run = await getRun(c.env, c.req.param('id'));
+  if (!run) throw new HttpError(404, 'not_found', 'No such run.');
+  return c.json(run);
+});
+
+// A manual run makes three billed agent turns, so it must be asked for explicitly.
+app.post('/api/admin/pipeline/run', async (c) => {
+  const body = await readBody(c);
+  if (body?.confirm !== true) throw new HttpError(400, 'confirm_required', 'A run makes billed agent calls; send {"confirm": true}.');
+  const issueDate = typeof body.issueDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.issueDate) ? body.issueDate : undefined;
+  return c.json(await runPipeline(c.env, { trigger: 'manual', issueDate }));
+});
+
 app.all('/api/*', () => {
   throw new HttpError(404, 'not_found', 'No such API route.');
 });
@@ -251,4 +302,10 @@ app.all('/api/*', () => {
 // Anything else that reaches the Worker is a static asset (or the SPA fallback).
 app.all('*', (c) => c.env.ASSETS.fetch(c.req.raw));
 
-export default app;
+export default {
+  fetch: app.fetch,
+  // The daily pipeline (wrangler.jsonc triggers.crons). It only ever saves drafts.
+  scheduled(controller, env, ctx) {
+    ctx.waitUntil(runPipeline(env, { trigger: 'cron', at: new Date(controller.scheduledTime) }));
+  },
+} satisfies ExportedHandler<Env>;

@@ -134,6 +134,32 @@ CREATE TABLE IF NOT EXISTS rate_events (
 );
 
 CREATE INDEX IF NOT EXISTS idx_rate_events ON rate_events (bucket, client, created_at);
+
+-- Text of each cited source page, kept so code can check quotes and numbers against it.
+-- Internal only: never shown to readers.
+CREATE TABLE IF NOT EXISTS source_snapshots (
+  url        TEXT PRIMARY KEY,
+  final_url  TEXT NOT NULL,
+  title      TEXT NOT NULL,
+  text       TEXT NOT NULL,
+  image      TEXT,
+  fetched_at TEXT NOT NULL
+);
+
+-- One row per pipeline run. id ("2026-10-12-1") seeds the A2A messageIds of its turns.
+-- status: running, drafted or failed. report is the run report JSON.
+CREATE TABLE IF NOT EXISTS pipeline_runs (
+  id          TEXT PRIMARY KEY,
+  issue_date  TEXT NOT NULL,
+  trigger     TEXT NOT NULL,
+  status      TEXT NOT NULL,
+  report      TEXT NOT NULL DEFAULT '{}',
+  error       TEXT,
+  started_at  TEXT NOT NULL,
+  finished_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_pipeline_runs_date ON pipeline_runs (issue_date, started_at);
 `;
 
 /**

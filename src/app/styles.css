@@ -443,3 +443,40 @@ code {
   padding: 1px 5px;
   font-size: 0.92em;
 }
+
+/* ── issues ── */
+
+.select {
+  font: inherit;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--fg);
+  max-width: 100%;
+}
+
+.run-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.run-list > li {
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+
+.run-details {
+  margin-top: 8px;
+}
+
+.check-list {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0;
+}
+
+.check-list li {
+  padding: 6px 0;
+}

@@ -18,7 +18,7 @@ export class ReaderError extends Error {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     ...init,
-    headers: init?.body ? { 'content-type': 'application/json' } : undefined,
+    headers: { ...(init?.body ? { 'content-type': 'application/json' } : {}), ...(init?.headers as Record<string, string> | undefined) },
   });
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
@@ -30,6 +30,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const fetchLatest = (before: string) => request<IssueResponse>(`/api/issues/latest?before=${encodeURIComponent(before)}`);
 export const fetchIssue = (date: string) => request<IssueResponse>(`/api/issues/${encodeURIComponent(date)}`);
 export const fetchArchive = () => request<{ issues: IssueSummary[] }>('/api/issues');
+
+/**
+ * The owner's draft preview (?preview=1). Uses the admin password the console keeps in
+ * this tab's sessionStorage; readers never have one, so for them this simply fails.
+ */
+export const fetchDraft = (date: string) =>
+  request<IssueResponse & { status: string }>(`/api/admin/issues/${encodeURIComponent(date)}`, {
+    headers: { 'x-admin-password': sessionStorage.getItem('adminPassword') ?? '' },
+  });
 
 const post = (path: string, body: unknown) => request<{ ok: true }>(path, { method: 'POST', body: JSON.stringify(body) });
 

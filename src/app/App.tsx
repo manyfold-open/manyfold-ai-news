@@ -1,6 +1,6 @@
 /**
- * The admin console at /admin: loads /api/state once, routes between the two tabs by
- * location.hash (/admin#chat, /admin#settings — no router dependency), and raises the
+ * The admin console at /admin: loads /api/state once, routes between the tabs by
+ * location.hash (/admin#issues, #chat, #settings — no router dependency), and raises the
  * password gate whenever the deployment requires one and the stored password is
  * missing or wrong. Nothing in the reader links here.
  */
@@ -12,11 +12,12 @@ import ChatView from './components/ChatView';
 import SettingsView from './components/SettingsView';
 import PasswordGate from './components/PasswordGate';
 import Logo from './components/Logo';
+import IssuesView from './components/IssuesView';
 import './styles.css';
 
-type Tab = 'chat' | 'settings';
+type Tab = 'issues' | 'chat' | 'settings';
 
-const tabFromHash = (): Tab => (location.hash === '#settings' ? 'settings' : 'chat');
+const tabFromHash = (): Tab => (location.hash === '#settings' ? 'settings' : location.hash === '#chat' ? 'chat' : 'issues');
 
 export default function App() {
   const [state, setState] = useState<AppState | null>(null);
@@ -74,9 +75,12 @@ export default function App() {
           <h1>
             <Logo />
           </h1>
-          <p className="muted">Admin: connected agents, chat and settings.</p>
+          <p className="muted">Admin: issues, connected agents, chat and settings.</p>
         </div>
         <nav className="tabs" aria-label="Pages">
+          <a className={tab === 'issues' ? 'tab active' : 'tab'} href="#issues">
+            Issues
+          </a>
           <a className={tab === 'chat' ? 'tab active' : 'tab'} href="#chat">
             Chat
           </a>
@@ -86,11 +90,9 @@ export default function App() {
         </nav>
       </header>
 
-      {tab === 'chat' ? (
-        <ChatView agents={state.agents} initialSession={state.connect.session} refreshState={refreshState} />
-      ) : (
-        <SettingsView agents={state.agents} initialSession={state.connect.session} refreshState={refreshState} />
-      )}
+      {tab === 'issues' && <IssuesView agents={state.agents} />}
+      {tab === 'chat' && <ChatView agents={state.agents} initialSession={state.connect.session} refreshState={refreshState} />}
+      {tab === 'settings' && <SettingsView agents={state.agents} initialSession={state.connect.session} refreshState={refreshState} />}
 
       {gateOpen && <PasswordGate onSubmitted={refreshState} />}
     </main>

@@ -1,0 +1,198 @@
+import { describe, expect, it } from 'vitest';
+import { parseFeed } from '../src/worker/pipeline/feeds';
+import { canonical, checkDraft, checkStory, numbersIn, quoteFound } from '../src/worker/pipeline/checks';
+import { extractJson, readDraft, type DraftStory } from '../src/worker/pipeline/draft';
+import { assembleIssue, checkTranslation, sourceLine, translationEntries } from '../src/worker/pipeline/assemble';
+import { issueDateFor, windowFor } from '../src/worker/pipeline/run';
+import { validateIssue } from '../src/shared/issue';
+
+const SOURCE_EN =
+  'Today we are releasing Q3. Running cost is about one-eighth that of comparable closed models, and the full model needs eight 80GB GPUs. ' +
+  'On coding and math benchmarks it scores within 3 points of leading closed models. The weights use a license that permits commercial use. ' +
+  'Reviewers spent 35% less time on code review.';
+const SOURCE_ZH = '麒麟实验室今天发布 Q3。推理成本约为同级闭源模型的八分之一，完整模型需 8 张 80GB GPU。';
+
+const sources = new Map([
+  ['https://lab.example/q3', { text: SOURCE_EN, image: 'https://lab.example/q3.png' }],
+  ['https://lab.example/zh', { text: SOURCE_ZH }],
+]);
+
+function story(overrides: Partial<DraftStory> = {}): DraftStory {
+  return {
+    id: 'q3',
+    region: 'cn',
+    top: true,
+    org: 'Qilin Lab',
+    lon: 120.16,
+    lat: 30.27,
+    category: 'Open Source',
+    title: 'Qilin Lab releases Q3 at one-eighth the running cost',
+    summary: 'Q3 costs <m0>one-eighth</m0> as much to run and scores within <m1>3 points</m1> of closed models.',
+    why: 'Self-hosting a near-frontier model gets cheaper.',
+    next: null,
+    sources: [
+      { url: 'https://lab.example/q3', name: 'Qilin Lab blog', kind: 'official', lang: 'en', published: '2026-10-11T14:10:00Z' },
+      { url: 'https://lab.example/zh', name: '麒麟实验室', kind: 'official', lang: 'zh', published: '2026-10-11T14:10:00Z' },
+    ],
+    marks: [
+      { source: 0, quote: 'Running cost is about one-eighth that of comparable closed models' },
+      { source: 0, quote: 'it scores within 3 points of leading closed models' },
+    ],
+    chart: null,
+    image: null,
+    questions: [
+      {
+        q: 'Can I run it myself?',
+        status: 'answered',
+        a: 'Yes. The license permits commercial use[1], and the full model needs eight 80GB GPUs[2].',
+        cites: [
+          { source: 0, quote: 'The weights use a license that permits commercial use.' },
+          { source: 1, quote: '完整模型需 8 张 80GB GPU', translation: 'The full model needs 8 80GB GPUs' },
+        ],
+      },
+    ],
+    ...overrides,
+  };
+}
+
+describe('parseFeed', () => {
+  it('reads RSS items with CDATA and entities', () => {
+    const xml = `<rss><channel><item><title><![CDATA[Model &amp; chip news]]></title><link>https://a.example/1</link>
+      <pubDate>Fri, 09 Oct 2026 07:00:00 GMT</pubDate><description><![CDATA[<p>Hello <b>world</b></p>]]></description></item></channel></rss>`;
+    expect(parseFeed(xml)).toEqual([{ title: 'Model & chip news', link: 'https://a.example/1', published: '2026-10-09T07:00:00.000Z', summary: 'Hello world' }]);
+  });
+
+  it('reads Atom entries with link href', () => {
+    const xml = `<feed><entry><title>Atom post</title><link rel="alternate" href="https://b.example/2"/><updated>2026-10-09T14:25:43+00:00</updated><summary>Short</summary></entry></feed>`;
+    expect(parseFeed(xml)[0]).toMatchObject({ title: 'Atom post', link: 'https://b.example/2', published: '2026-10-09T14:25:43.000Z' });
+  });
+});
+
+describe('quote and number matching', () => {
+  it('ignores spacing, case, curly quotes and dashes', () => {
+    expect(canonical('It’s  a — test')).toBe("it'sa-test");
+    expect(quoteFound('RUNNING cost is about one‑eighth', SOURCE_EN)).toBe(true);
+    expect(quoteFound('推理成本约为同级闭源模型的八分之一', SOURCE_ZH)).toBe(true);
+  });
+
+  it('accepts quotes that skip text with an ellipsis, in order only', () => {
+    expect(quoteFound('Today we are releasing Q3… eight 80GB GPUs', SOURCE_EN)).toBe(true);
+    expect(quoteFound('eight 80GB GPUs… Today we are releasing Q3', SOURCE_EN)).toBe(false);
+  });
+
+  it('normalizes numbers the way they are written', () => {
+    expect(numbersIn('1,200 developers, 3.5x, 70B and <m0>35%</m0>[2]')).toEqual(['1200', '3.5', '70', '35']);
+  });
+});
+
+describe('check 1: checkStory', () => {
+  it('keeps a story whose quotes and numbers are all in the sources', () => {
+    const { check, story: kept } = checkStory(story(), sources);
+    expect(check.reasons).toEqual([]);
+    expect(check.kept).toBe(true);
+    expect(kept?.questions).toHaveLength(1);
+  });
+
+  it('drops a story with an invented number', () => {
+    const { check } = checkStory(story({ why: 'It could save companies 90% of their bill.' }), sources);
+    expect(check.kept).toBe(false);
+    expect(check.reasons.join(' ')).toMatch(/Number "90"/);
+  });
+
+  it('drops a story whose mark quote is not in the source', () => {
+    const { check } = checkStory(story({ marks: [{ source: 0, quote: 'costs a tenth as much' }, { source: 0, quote: 'within 3 points' }] }), sources);
+    expect(check.kept).toBe(false);
+    expect(check.reasons.join(' ')).toMatch(/mark 0/);
+  });
+
+  it('drops a story built only on rumors', () => {
+    const s = story();
+    const { check } = checkStory({ ...s, sources: s.sources.map((src) => ({ ...src, kind: 'rumor' as const })) }, sources);
+    expect(check.kept).toBe(false);
+  });
+
+  it('removes a question with an unverifiable citation but keeps the story', () => {
+    const s = story();
+    const bad = { ...s.questions[0], cites: [{ source: 0, quote: 'free for everyone' }, s.questions[0].cites[1]] };
+    const { check, story: kept } = checkStory({ ...s, questions: [bad] }, sources);
+    expect(check.kept).toBe(true);
+    expect(kept?.questions).toHaveLength(0);
+    expect(check.warnings.join(' ')).toMatch(/Question 1 removed/);
+  });
+
+  it('removes an image unless the official source published one', () => {
+    const { story: withImage } = checkStory(story({ image: { source: 0, alt: 'Launch image' } }), sources);
+    expect(withImage?.image).not.toBeNull();
+    const { story: without } = checkStory(story({ image: { source: 1, alt: 'No image here' } }), sources);
+    expect(without?.image).toBeNull();
+  });
+
+  it('refuses hype words', () => {
+    const { check } = checkStory(story({ title: 'A game-changer: Qilin Lab releases Q3' }), sources);
+    expect(check.kept).toBe(false);
+  });
+});
+
+describe('checkDraft', () => {
+  it('drops stories already covered this week and keeps exactly one top story', () => {
+    const a = story({ id: 'a', top: false });
+    const b = story({ id: 'b', top: true });
+    const old = story({ id: 'old', sources: [{ ...a.sources[0], url: 'https://lab.example/old' }] });
+    const result = checkDraft({ today: [], stories: [a, b, old], briefs: [] }, sources, new Set(['https://lab.example/old']));
+    expect(result.draft.stories.map((s) => s.id)).toEqual(['b', 'a']);
+    expect(result.draft.stories.map((s) => s.top)).toEqual([true, false]);
+    expect(result.checks.find((c) => c.id === 'old')?.reasons).toEqual(['Already covered in the last 7 days.']);
+    expect(result.draft.today.length).toBeGreaterThan(0);
+  });
+});
+
+describe('agent output', () => {
+  it('extracts JSON from a fenced reply', () => {
+    expect(extractJson('Here you go:\n```json\n{"items":[1]}\n```')).toEqual({ items: [1] });
+  });
+
+  it('coerces a loose draft and gives every story a unique id', () => {
+    const draft = readDraft({ stories: [{ title: 'Same title' }, { title: 'Same title' }], briefs: [], today: [] });
+    expect(new Set(draft.stories.map((s) => s.id)).size).toBe(2);
+  });
+});
+
+describe('check 3 and assembly', () => {
+  it('strips markers the translation broke and flags new numbers', () => {
+    const warnings: string[] = [];
+    expect(checkTranslation('s0.summary', 'costs <m0>one-eighth</m0>', '成本只有八分之一', warnings)).toBe('成本只有八分之一');
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/markers/);
+    expect(checkTranslation('s0.why', 'saves 30%', '节省 40%', warnings)).toBe('节省 40%');
+    expect(warnings).toHaveLength(2);
+    expect(warnings[1]).toMatch(/40/);
+    const clean: string[] = [];
+    checkTranslation('s0.title', 'saves 30%', '节省 30%', clean);
+    expect(clean).toEqual([]);
+  });
+
+  it('counts the source line instead of trusting the model', () => {
+    expect(sourceLine([{ kind: 'official' }, { kind: 'reported' }, { kind: 'reported' }])).toEqual({ en: 'Official announcement, plus 2 reports', zh: '官方公告，另有 2 家媒体报道' });
+  });
+
+  it('assembles a valid bilingual issue', () => {
+    const checked = checkDraft({ today: [{ story: 'q3', text: 'Qilin released Q3.' }], stories: [story()], briefs: [] }, sources, new Set());
+    const entries = translationEntries(checked.draft, new Map());
+    const zh = Object.fromEntries(Object.entries(entries).map(([k, v]) => [k, `中文:${v}`]));
+    const { issue } = assembleIssue({ date: '2026-10-12', number: 1, draft: checked.draft, zh, sourceNamesZh: new Map(), images: new Map() });
+    expect(() => validateIssue(issue)).not.toThrow();
+    expect(issue.stories[0].summary.zh).toContain('<m0>');
+    expect(issue.stories[0].marks[0].tr?.zh).toBeTruthy();
+    expect(issue.stories[0].ask[0].cites[1].tr?.en).toBe('The full model needs 8 80GB GPUs');
+  });
+});
+
+describe('schedule', () => {
+  it('a 19:30 UTC run prepares the next morning, Mondays cover the weekend', () => {
+    const at = new Date('2026-10-11T19:30:00Z');
+    expect(issueDateFor(at)).toBe('2026-10-12');
+    const window = windowFor('2026-10-12', at);
+    expect((window.to.getTime() - window.from.getTime()) / 3_600_000).toBe(72);
+    expect(issueDateFor(new Date('2026-10-12T10:00:00Z'))).toBe('2026-10-12');
+  });
+});
