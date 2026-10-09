@@ -456,6 +456,23 @@ code {
   max-width: 100%;
 }
 
+.agent-roles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+}
+
+.agent-roles label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.run-details h4 {
+  margin: 14px 0 4px;
+  font-size: 0.95em;
+}
+
 .run-list {
   list-style: none;
   padding: 0;

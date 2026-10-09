@@ -1,5 +1,5 @@
 /**
- * One pipeline turn with the writer agent over A2A message/stream. Each turn is a
+ * One pipeline turn with the writer or review agent over A2A message/stream. Each turn is a
  * billed call, so the messageId is derived from the stored run row and the step name:
  * a retried send of the same step can never bill twice.
  */

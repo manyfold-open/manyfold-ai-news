@@ -1,13 +1,14 @@
 /**
- * The daily pipeline: collect → pick (agent) → fetch sources → write (agent) →
- * check 1 (code) → translate (agent) → check 3 (code) → save as a DRAFT.
+ * The daily pipeline: collect → pick (writer) → fetch sources → write (writer) →
+ * check 1 (code) → check 2 (review agent, then check 1 again) → translate (writer) →
+ * check 3 (code) → save as a DRAFT.
  *
  * Nothing here publishes. While the pipeline is in its trial period every issue stays
- * a draft until the owner reads it and publishes it from /admin. Check 2 (an independent
- * review agent) is not connected yet; the run report says so.
+ * a draft until the owner reads it and publishes it from /admin.
  *
  * Each run is one row in pipeline_runs; its id seeds the A2A messageIds, so retrying a
- * step of the same run cannot bill twice. Three agent turns per run, all billed.
+ * step of the same run cannot bill twice. Four agent turns per run, all billed: three
+ * on the writer, one on the reviewer, which must be a different agent.
  */
 
 import type { Env } from '../types';
@@ -18,17 +19,20 @@ import { saveIssue } from '../issues';
 import { validateIssue } from '../../shared/issue';
 import { NO_IMAGE_HOSTS, collectCandidates, type Candidate, type FeedResult } from './feeds';
 import { fetchSnapshots, genericImages, type Snapshot } from './snapshot';
-import { selectPrompt, translatePrompt, writePrompt, type WriteItem } from './prompts';
+import { reviewPrompt, selectPrompt, translatePrompt, writePrompt, type WriteItem } from './prompts';
 import { agentTurn } from './agent';
 import { extractJson, readDraft } from './draft';
 import { checkDraft, type ItemCheck } from './checks';
 import { assembleIssue, translationEntries } from './assemble';
+import { applyReview, readReview, type ReviewReport } from './review';
 
 export const WRITER_AGENT_KEY = 'pipeline_writer_agent';
+export const REVIEWER_AGENT_KEY = 'pipeline_reviewer_agent';
 
 export interface RunReport {
   issueDate: string;
   agent: string | null;
+  reviewer: string | null;
   window: { from: string; to: string };
   feeds: FeedResult[];
   candidates: number;
@@ -38,7 +42,8 @@ export interface RunReport {
   /** Share images dropped as logos or site defaults rather than pictures of the story. */
   genericImages: number;
   checks: ItemCheck[];
-  review: string;
+  /** Check 2: one verdict per item from the review agent. */
+  review: ReviewReport | null;
   translationWarnings: string[];
   stories: number;
   briefs: number;
@@ -50,7 +55,7 @@ export interface RunReport {
 const MIN_STORIES = 3;
 const MAX_SOURCES_PER_ITEM = 3;
 // Workers allow 50 outbound requests per invocation on the free plan: 16 feeds + this
-// many source pages + 3 agent turns stays under it.
+// many source pages + 4 agent turns stays under it.
 const MAX_SOURCE_FETCHES = 26;
 
 /** The issue a run started now prepares: the morning after 19:30 UTC, today before it. */
@@ -72,6 +77,16 @@ export async function writerAgentId(env: Env): Promise<string | null> {
 }
 
 export const setWriterAgent = (env: Env, agentId: string) => setSetting(env, WRITER_AGENT_KEY, agentId);
+
+/** The review agent is never chosen implicitly, and never the writer itself. */
+export async function reviewerAgentId(env: Env): Promise<string | null> {
+  const chosen = await getSetting(env, REVIEWER_AGENT_KEY);
+  if (!chosen || chosen === (await writerAgentId(env))) return null;
+  const agents = await listConnectedAgents(env);
+  return agents.some((a) => a.agentId === chosen) ? chosen : null;
+}
+
+export const setReviewerAgent = (env: Env, agentId: string) => setSetting(env, REVIEWER_AGENT_KEY, agentId);
 
 async function recentUrls(env: Env, issueDate: string): Promise<Set<string>> {
   const since = new Date(Date.parse(`${issueDate}T00:00:00Z`) - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -112,6 +127,7 @@ export async function runPipeline(env: Env, options: { trigger: 'cron' | 'manual
   const report: RunReport = {
     issueDate,
     agent: null,
+    reviewer: null,
     window: { from: window.from.toISOString(), to: window.to.toISOString() },
     feeds: [],
     candidates: 0,
@@ -120,7 +136,7 @@ export async function runPipeline(env: Env, options: { trigger: 'cron' | 'manual
     sourceFailures: [],
     genericImages: 0,
     checks: [],
-    review: 'Check 2 (independent review agent) is not connected yet; drafts have passed checks 1 and 3 only.',
+    review: null,
     translationWarnings: [],
     stories: 0,
     briefs: 0,
@@ -130,10 +146,15 @@ export async function runPipeline(env: Env, options: { trigger: 'cron' | 'manual
   };
 
   try {
+    // Both agents are settled before the first billed turn.
     const agentId = await writerAgentId(env);
     if (!agentId) throw new Error('No writer agent is set. Choose one in /admin under Issues.');
+    const reviewerId = await reviewerAgentId(env);
+    if (!reviewerId) throw new Error('No review agent is set. Choose one in /admin under Issues; it must be a different agent from the writer.');
     const cred = await credentialFor(env, agentId);
+    const reviewerCred = await credentialFor(env, reviewerId);
     report.agent = cred.label;
+    report.reviewer = reviewerCred.label;
 
     // 1. Collect candidates from the feeds.
     report.step = 'collecting';
@@ -203,17 +224,25 @@ export async function runPipeline(env: Env, options: { trigger: 'cron' | 'manual
     report.checks = checked.checks;
     if (checked.draft.stories.length < MIN_STORIES) throw new Error(`Only ${checked.draft.stories.length} stories passed the checks; at least ${MIN_STORIES} are needed.`);
 
-    // 6. The agent translates (billed turn 3); check 3 runs while assembling.
+    // 6. Check 2: the review agent judges the checked draft against the sources (billed
+    // turn 3, on the reviewer); its fixes go through check 1 again.
+    report.step = 'reviewing';
+    const verdicts = readReview(extractJson(await agentTurn(reviewerCred, `aiin5-${runId}-review`, reviewPrompt(issueDate, checked.draft, texts))));
+    const reviewed = applyReview(checked.draft, verdicts, texts, reviewerCred.label);
+    report.review = reviewed.review;
+    if (reviewed.draft.stories.length < MIN_STORIES) throw new Error(`Only ${reviewed.draft.stories.length} stories passed the review; at least ${MIN_STORIES} are needed.`);
+
+    // 7. The writer translates (billed turn 4); check 3 runs while assembling.
     report.step = 'translating';
     const sourceNamesZh = new Map(candidates.map((c) => [c.link, c.sourceName.zh]));
-    const entries = translationEntries(checked.draft, sourceNamesZh);
+    const entries = translationEntries(reviewed.draft, sourceNamesZh);
     const zh = extractJson(await agentTurn(cred, `aiin5-${runId}-translate`, translatePrompt(entries))) as Record<string, string>;
     const images = new Map<string, string>();
     snapshots.forEach((s, url) => s.image && images.set(url, s.image));
-    const { issue, warnings } = assembleIssue({ date: issueDate, number: await nextNumber(env, issueDate), draft: checked.draft, zh, sourceNamesZh, images });
+    const { issue, warnings } = assembleIssue({ date: issueDate, number: await nextNumber(env, issueDate), draft: reviewed.draft, zh, sourceNamesZh, images });
     report.translationWarnings = warnings;
 
-    // 7. Save as a draft. Never published from here.
+    // 8. Save as a draft. Never published from here.
     report.step = 'saving';
     validateIssue(issue);
     const existing = await env.DB.prepare('SELECT status FROM issues WHERE date = ?').bind(issueDate).first<{ status: string }>();

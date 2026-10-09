@@ -24,8 +24,8 @@
  *   PUT    /api/admin/issues/:date          admin  validate and store an issue, as draft or published
  *   GET    /api/admin/issues/:date          admin  one issue in any status (draft preview)
  *   POST   /api/admin/issues/:date/status   admin  publish or unpublish
- *   GET    /api/admin/pipeline              admin  writer agent and recent runs
- *   PUT    /api/admin/pipeline/agent        admin  choose the writer agent
+ *   GET    /api/admin/pipeline              admin  writer and review agents, recent runs
+ *   PUT    /api/admin/pipeline/agent        admin  choose the writer or the review agent
  *   GET    /api/admin/pipeline/sources      admin  read feeds and a few sources (no agent, free)
  *   GET    /api/admin/pipeline/runs/:id     admin  one run report
  *   POST   /api/admin/pipeline/run          admin  run the pipeline now (billed; needs confirm)
@@ -55,7 +55,7 @@ import {
 import { getConversation, handleChatTurn, resetConversation } from './chat';
 import { IssueValidationError } from '../shared/issue';
 import { getAnyIssue, getIssue, getLatestIssue, listAllIssues, listIssues, saveIssue, seedSampleIssue, setIssueStatus } from './issues';
-import { checkSources, getRun, listRuns, runPipeline, setWriterAgent, writerAgentId } from './pipeline/run';
+import { checkSources, getRun, listRuns, reviewerAgentId, runPipeline, setReviewerAgent, setWriterAgent, writerAgentId } from './pipeline/run';
 import { clientKey, recordFeedback, recordReport, subscribe } from './public';
 
 const SERVICE = 'cloudflare-worker-starter';
@@ -266,15 +266,19 @@ app.post('/api/admin/issues/:date/status', async (c) => {
 /* ───────── admin: pipeline ───────── */
 
 app.get('/api/admin/pipeline', async (c) =>
-  c.json({ writerAgentId: await writerAgentId(c.env), runs: await listRuns(c.env) }),
+  c.json({ writerAgentId: await writerAgentId(c.env), reviewerAgentId: await reviewerAgentId(c.env), runs: await listRuns(c.env) }),
 );
 
+// The review agent must stay independent of the writer, so one agent cannot be both.
 app.put('/api/admin/pipeline/agent', async (c) => {
   const body = await readBody(c);
   const agentId = typeof body?.agentId === 'string' ? body.agentId : '';
+  const role = body?.role === 'reviewer' ? 'reviewer' : 'writer';
   const agents = await listConnectedAgents(c.env);
   if (!agents.some((a) => a.agentId === agentId)) throw new HttpError(400, 'bad_request', 'That agent is not connected.');
-  await setWriterAgent(c.env, agentId);
+  const other = role === 'reviewer' ? await writerAgentId(c.env) : await reviewerAgentId(c.env);
+  if (agentId === other) throw new HttpError(400, 'bad_request', 'The writer and the review agent must be different agents.');
+  await (role === 'reviewer' ? setReviewerAgent : setWriterAgent)(c.env, agentId);
   return c.json({ ok: true });
 });
 
@@ -287,7 +291,7 @@ app.get('/api/admin/pipeline/runs/:id', async (c) => {
   return c.json(run);
 });
 
-// A manual run makes three billed agent turns, so it must be asked for explicitly.
+// A manual run makes four billed agent turns, so it must be asked for explicitly.
 app.post('/api/admin/pipeline/run', async (c) => {
   const body = await readBody(c);
   if (body?.confirm !== true) throw new HttpError(400, 'confirm_required', 'A run makes billed agent calls; send {"confirm": true}.');

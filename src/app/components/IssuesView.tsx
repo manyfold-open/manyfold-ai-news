@@ -1,8 +1,8 @@
 /**
- * The owner's issue desk at /admin#issues: choose the writer agent, run the pipeline,
- * read each run report (what passed check 1, what was cut and why), preview drafts in
- * the real reader, and publish. During the trial period nothing is published without
- * a click here.
+ * The owner's issue desk at /admin#issues: choose the writer and review agents, run the
+ * pipeline, read each run report (what passed check 1, what the reviewer passed, fixed
+ * or cut, and why), preview drafts in the real reader, and publish. During the trial
+ * period nothing is published without a click here.
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -29,8 +29,19 @@ interface ItemCheck {
   warnings: string[];
 }
 
+interface ReviewItem {
+  id: string;
+  title: string;
+  verdict: 'pass' | 'fix' | 'cut' | 'missing';
+  problems: string[];
+  changed: string[];
+  kept: boolean;
+  notes: string[];
+}
+
 interface RunReport {
   agent: string | null;
+  reviewer?: string | null;
   step: string;
   candidates: number;
   picked: number;
@@ -38,7 +49,8 @@ interface RunReport {
   sourceFailures: { url: string; error: string }[];
   feeds: { feed: string; items: number; error?: string }[];
   checks: ItemCheck[];
-  review: string;
+  /** Older runs stored a sentence here, before check 2 existed. */
+  review: { agent: string; items: ReviewItem[]; top?: { from: string; to: string } } | string | null;
   translationWarnings: string[];
   durationMs: number;
 }
@@ -48,6 +60,41 @@ interface IssueRow {
   number: number;
   status: string;
   updatedAt: string;
+}
+
+const VERDICT: Record<ReviewItem['verdict'], string> = { pass: 'passed', fix: 'fixed', cut: 'cut', missing: 'not reviewed' };
+
+function Review({ review }: { review: RunReport['review'] }) {
+  if (!review) return null;
+  if (typeof review === 'string') return <p className="warn small">{review}</p>;
+  const count = (v: ReviewItem['verdict']) => review.items.filter((i) => i.verdict === v).length;
+  return (
+    <>
+      <h4>Check 2: review by {review.agent}</h4>
+      <p className="muted small">
+        {count('pass')} passed · {count('fix')} fixed · {count('cut') + count('missing')} cut
+        {review.top ? ` · lead moved from “${review.top.from}” to “${review.top.to}”` : ''}
+      </p>
+      <ul className="check-list">
+        {review.items.map((item) => (
+          <li key={item.id}>
+            <span className={item.kept ? 'badge ok' : 'badge warn'}>{item.kept ? VERDICT[item.verdict] : 'cut'}</span> {item.title}
+            {item.problems.map((problem) => (
+              <div key={problem} className="small warn">
+                {problem}
+              </div>
+            ))}
+            {item.changed.length > 0 && <div className="small muted">Changed: {item.changed.join(', ')}</div>}
+            {item.notes.map((note) => (
+              <div key={note} className="small muted">
+                {note}
+              </div>
+            ))}
+          </li>
+        ))}
+      </ul>
+    </>
+  );
 }
 
 function RunDetails({ id }: { id: string }) {
@@ -63,9 +110,10 @@ function RunDetails({ id }: { id: string }) {
       {r && (
         <>
           <p className="muted small">
-            Agent {r.agent ?? 'none'} · {r.candidates} candidates · {r.picked} picked · {r.sourcesFetched} sources read · stopped at “{r.step}” · {Math.round(r.durationMs / 1000)} s
+            Writer {r.agent ?? 'none'}
+            {r.reviewer ? ` · reviewer ${r.reviewer}` : ''} · {r.candidates} candidates · {r.picked} picked · {r.sourcesFetched} sources read · stopped at “{r.step}” · {Math.round(r.durationMs / 1000)} s
           </p>
-          <p className="warn small">{r.review}</p>
+          {r.checks.length > 0 && <h4>Check 1: quotes and numbers</h4>}
           {r.checks.length > 0 && (
             <ul className="check-list">
               {r.checks.map((c) => (
@@ -85,6 +133,7 @@ function RunDetails({ id }: { id: string }) {
               ))}
             </ul>
           )}
+          <Review review={r.review} />
           {r.translationWarnings.length > 0 && (
             <details>
               <summary className="small">{r.translationWarnings.length} translation notes</summary>
@@ -116,6 +165,7 @@ function RunDetails({ id }: { id: string }) {
 
 export default function IssuesView({ agents }: { agents: ConnectedAgent[] }) {
   const [writer, setWriter] = useState<string | null>(null);
+  const [reviewer, setReviewer] = useState<string | null>(null);
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [issues, setIssues] = useState<IssueRow[]>([]);
   const [open, setOpen] = useState<string | null>(null);
@@ -127,10 +177,11 @@ export default function IssuesView({ agents }: { agents: ConnectedAgent[] }) {
   const refresh = useCallback(async () => {
     try {
       const [pipeline, list] = await Promise.all([
-        api<{ writerAgentId: string | null; runs: RunSummary[] }>('/api/admin/pipeline'),
+        api<{ writerAgentId: string | null; reviewerAgentId: string | null; runs: RunSummary[] }>('/api/admin/pipeline'),
         api<{ issues: IssueRow[] }>('/api/admin/issues'),
       ]);
       setWriter(pipeline.writerAgentId);
+      setReviewer(pipeline.reviewerAgentId);
       setRuns(pipeline.runs);
       setIssues(list.issues);
     } catch (cause) {
@@ -142,11 +193,11 @@ export default function IssuesView({ agents }: { agents: ConnectedAgent[] }) {
     void refresh();
   }, [refresh]);
 
-  const chooseWriter = async (agentId: string) => {
+  const chooseAgent = async (role: 'writer' | 'reviewer', agentId: string) => {
     setError('');
     try {
-      await api('/api/admin/pipeline/agent', { method: 'PUT', body: JSON.stringify({ agentId }) });
-      setWriter(agentId);
+      await api('/api/admin/pipeline/agent', { method: 'PUT', body: JSON.stringify({ role, agentId }) });
+      (role === 'writer' ? setWriter : setReviewer)(agentId);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     }
@@ -199,26 +250,45 @@ export default function IssuesView({ agents }: { agents: ConnectedAgent[] }) {
         The pipeline runs every day at 19:30 UTC and saves a <strong>draft</strong>. Read the draft, check the run report, then publish it. Nothing reaches readers until you do.
       </p>
 
-      <h3>Writer agent</h3>
-      {agents.length === 0 ? (
-        <p className="muted">Connect an agent in Settings first.</p>
-      ) : (
-        <select className="select" value={writer ?? ''} onChange={(e) => void chooseWriter(e.target.value)}>
-          <option value="" disabled>
-            Choose the agent that picks, writes and translates
-          </option>
-          {agents.map((a) => (
-            <option key={a.agentId} value={a.agentId}>
-              {a.name}
-            </option>
-          ))}
-        </select>
+      <h3>Agents</h3>
+      {agents.length < 2 ? (
+        <p className="muted">Connect two agents in Settings: one writes, a different one reviews.</p>
+      ) : null}
+      {agents.length > 0 && (
+        <div className="agent-roles">
+          <label>
+            <span className="small muted">Writer: picks, writes and translates</span>
+            <select className="select" value={writer ?? ''} onChange={(e) => void chooseAgent('writer', e.target.value)}>
+              <option value="" disabled>
+                Choose the writer
+              </option>
+              {agents.map((a) => (
+                <option key={a.agentId} value={a.agentId} disabled={a.agentId === reviewer}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span className="small muted">Reviewer: checks the draft against the sources (check 2)</span>
+            <select className="select" value={reviewer ?? ''} onChange={(e) => void chooseAgent('reviewer', e.target.value)}>
+              <option value="" disabled>
+                Choose a different agent to review
+              </option>
+              {agents.map((a) => (
+                <option key={a.agentId} value={a.agentId} disabled={a.agentId === writer}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
       )}
 
       <h3>Run now</h3>
       {confirming ? (
         <div className="row">
-          <span className="warn small">A run makes three billed calls to the agent and takes a few minutes.</span>
+          <span className="warn small">A run makes four billed agent calls (three to the writer, one to the reviewer) and takes a few minutes.</span>
           <button className="button" onClick={() => void runNow()}>
             Run it
           </button>
@@ -228,7 +298,7 @@ export default function IssuesView({ agents }: { agents: ConnectedAgent[] }) {
         </div>
       ) : (
         <span className="row">
-          <button className="button" disabled={running || !writer} onClick={() => setConfirming(true)}>
+          <button className="button" disabled={running || !writer || !reviewer} onClick={() => setConfirming(true)}>
             {running ? 'Running… keep this page open' : 'Run the pipeline'}
           </button>
           <button className="button subtle" onClick={() => void checkSources()}>

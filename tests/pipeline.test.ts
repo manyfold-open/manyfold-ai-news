@@ -5,6 +5,8 @@ import { canonical, checkDraft, checkStory, extraQuantities, numbersIn, quantiti
 import { extractJson, readDraft, type DraftStory } from '../src/worker/pipeline/draft';
 import { assembleIssue, checkTranslation, sourceLine, translationEntries } from '../src/worker/pipeline/assemble';
 import { issueDateFor, windowFor } from '../src/worker/pipeline/run';
+import { applyReview, readReview } from '../src/worker/pipeline/review';
+import { reviewPrompt } from '../src/worker/pipeline/prompts';
 import { validateIssue } from '../src/shared/issue';
 
 const SOURCE_EN =
@@ -184,6 +186,85 @@ describe('checkDraft', () => {
     expect(result.draft.stories.map((s) => s.top)).toEqual([true, false]);
     expect(result.checks.find((c) => c.id === 'old')?.reasons).toEqual(['Already covered in the last 7 days.']);
     expect(result.draft.today.length).toBeGreaterThan(0);
+  });
+});
+
+describe('check 2: review', () => {
+  const brief = { region: 'cn' as const, org: 'Qilin Lab', lon: null, lat: null, kind: 'official' as const, text: 'Qilin Lab released Q3 under a commercial license.', sourceName: 'Qilin Lab blog', url: 'https://lab.example/q3' };
+  const makeDraft = () => ({
+    today: [
+      { story: 'a', text: 'Qilin Lab releases Q3.' },
+      { story: 'b', text: 'Q3 runs on eight GPUs.' },
+    ],
+    stories: [story({ id: 'a' }), story({ id: 'b', top: false }), story({ id: 'c', top: false })],
+    briefs: [brief, { ...brief, text: 'Q3 needs eight 80GB GPUs.' }],
+  });
+
+  it('reads verdicts and treats anything unknown as a cut', () => {
+    const verdicts = readReview({ items: [{ id: 'a', verdict: 'pass' }, { id: 'b', verdict: 'maybe' }, { id: 'a', verdict: 'cut' }, { verdict: 'pass' }] });
+    expect([...verdicts.verdicts.keys()]).toEqual(['a', 'b']);
+    expect(verdicts.verdicts.get('a')?.verdict).toBe('pass');
+    expect(verdicts.verdicts.get('b')?.verdict).toBe('cut');
+    expect(verdicts.top).toBeNull();
+  });
+
+  it('applies pass, fix and cut, and cuts what was not judged', () => {
+    const verdicts = readReview({
+      items: [
+        { id: 'a', verdict: 'pass' },
+        { id: 'b', verdict: 'fix', problems: ['"why" overstates'], fix: { why: 'Running it costs less, by the company\'s own account.', today: 'Q3 needs eight 80GB GPUs.' }, remove: ['q0'] },
+        { id: 'brief-1', verdict: 'cut', problems: ['Same event as story a.'] },
+      ],
+    });
+    const { draft, review } = applyReview(makeDraft(), verdicts, sources, 'reviewer');
+    expect(draft.stories.map((s) => s.id)).toEqual(['a', 'b']);
+    expect(draft.stories[1].why).toBe("Running it costs less, by the company's own account.");
+    expect(draft.stories[1].questions).toHaveLength(0);
+    expect(draft.today.find((t) => t.story === 'b')?.text).toBe('Q3 needs eight 80GB GPUs.');
+    expect(draft.briefs).toHaveLength(0);
+    const byId = new Map(review.items.map((i) => [i.id, i]));
+    expect(byId.get('b')?.changed).toEqual(['why', 'today', 'removed q0']);
+    expect(byId.get('c')).toMatchObject({ verdict: 'missing', kept: false });
+    expect(byId.get('brief-2')).toMatchObject({ verdict: 'missing', kept: false });
+    expect(byId.get('brief-1')).toMatchObject({ verdict: 'cut', kept: false, problems: ['Same event as story a.'] });
+  });
+
+  it('runs check 1 again, so a fix cannot bring in a number the sources lack', () => {
+    const verdicts = readReview({
+      items: [
+        { id: 'a', verdict: 'fix', fix: { summary: 'Q3 costs <m0>one-eighth</m0> as much and beats closed models by 40 points.' } },
+        { id: 'b', verdict: 'pass' },
+        { id: 'c', verdict: 'fix', fix: { colour: 'blue' } },
+        { id: 'brief-1', verdict: 'fix', fix: { text: 'Q3 needs 12 GPUs.' } },
+        { id: 'brief-2', verdict: 'pass' },
+      ],
+    });
+    const { draft, review } = applyReview(makeDraft(), verdicts, sources, 'reviewer');
+    expect(draft.stories.map((s) => s.id)).toEqual(['b']);
+    expect(draft.stories[0].top).toBe(true);
+    const byId = new Map(review.items.map((i) => [i.id, i]));
+    expect(byId.get('a')?.kept).toBe(false);
+    expect(byId.get('a')?.notes.join(' ')).toContain('Number "40"');
+    expect(byId.get('c')?.notes.join(' ')).toContain('gave none that applies');
+    expect(byId.get('brief-1')?.kept).toBe(false);
+    expect(byId.get('brief-2')?.kept).toBe(true);
+    expect(draft.briefs.map((b) => b.text)).toEqual(['Q3 needs eight 80GB GPUs.']);
+  });
+
+  it('lets the reviewer move the lead to a story that survived', () => {
+    const pass = (id: string) => ({ id, verdict: 'pass' });
+    const moved = applyReview(makeDraft(), readReview({ top: 'c', items: ['a', 'b', 'c', 'brief-1', 'brief-2'].map(pass) }), sources, 'reviewer');
+    expect(moved.draft.stories.map((s) => [s.id, s.top])).toEqual([['c', true], ['a', false], ['b', false]]);
+    expect(moved.review.top).toEqual({ from: 'a', to: 'c' });
+    const cut = applyReview(makeDraft(), readReview({ top: 'c', items: [...['a', 'b', 'brief-1', 'brief-2'].map(pass), { id: 'c', verdict: 'cut' }] }), sources, 'reviewer');
+    expect(cut.draft.stories[0].id).toBe('a');
+    expect(cut.review.top).toBeUndefined();
+  });
+
+  it('gives the reviewer every item id with its source text', () => {
+    const prompt = reviewPrompt('2026-10-12', makeDraft(), sources);
+    for (const id of ['"id":"a"', '"id":"b"', '"id":"c"', '"id":"brief-1"', '"id":"brief-2"']) expect(prompt).toContain(id);
+    expect(prompt).toContain('Running cost is about one-eighth');
   });
 });
 
