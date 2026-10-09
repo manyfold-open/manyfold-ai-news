@@ -81,6 +81,59 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 
 CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages (conversation_id, id);
+
+-- One daily issue. data holds the full Issue JSON (src/shared/issue.ts), validated on
+-- write. Only status = 'published' rows are ever served to readers.
+CREATE TABLE IF NOT EXISTS issues (
+  date         TEXT PRIMARY KEY,
+  number       INTEGER NOT NULL,
+  status       TEXT NOT NULL DEFAULT 'draft',
+  data         TEXT NOT NULL,
+  published_at TEXT,
+  updated_at   TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_issues_status_date ON issues (status, date);
+
+-- Email subscribers. Personal data: never logged, never returned by the API.
+-- status stays 'pending' until confirmation mail exists.
+CREATE TABLE IF NOT EXISTS subscribers (
+  email      TEXT PRIMARY KEY,
+  lang       TEXT NOT NULL,
+  timezone   TEXT NOT NULL,
+  status     TEXT NOT NULL DEFAULT 'pending',
+  source     TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+-- "Was this issue useful?" from the done section.
+CREATE TABLE IF NOT EXISTS feedback (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  issue_date TEXT NOT NULL,
+  value      TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+-- "Report a problem" on a story, a checked number or an answer.
+CREATE TABLE IF NOT EXISTS reports (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  issue_date TEXT NOT NULL,
+  story_id   TEXT NOT NULL,
+  target     TEXT NOT NULL,
+  lang       TEXT NOT NULL,
+  status     TEXT NOT NULL DEFAULT 'open',
+  created_at TEXT NOT NULL
+);
+
+-- Throttle for the public write routes: one row per request, keyed by a salted IP hash.
+CREATE TABLE IF NOT EXISTS rate_events (
+  bucket     TEXT NOT NULL,
+  client     TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_rate_events ON rate_events (bucket, client, created_at);
 `;
 
 /**

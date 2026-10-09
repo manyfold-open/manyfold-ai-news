@@ -1,0 +1,1180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AI in 5 · Monday, October 12</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,200..800;1,6..72,200..800&family=Schibsted+Grotesk:wght@400..700&family=Noto+Serif+SC:wght@400;600&display=swap" rel="stylesheet">
+<style>
+/* Tokens: four fills, four meanings.
+   white = the news, marker = a number checked against its source,
+   stone = our analysis, mint = answers to the reader's questions. */
+:root {
+  --paper: #FFFFFF;
+  --ink: #000000;
+  --graphite: #5F5E58;
+  --hairline: #E6E4DE;
+  --marker: #FFE45C;
+  --marker-soft: #FFF6C4;
+  --stone: #F2F1ED;
+  --mint: #DFF1E6;
+  --green: #0A5A39;
+  --green-soft: #3D5E50;
+  --serif: "Newsreader", "Noto Serif SC", Georgia, serif;
+  --sans: "Schibsted Grotesk", "PingFang SC", "Hiragino Sans GB", system-ui, sans-serif;
+  --measure: 40rem;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: 18px;
+  line-height: 1.55;
+  font-optical-sizing: auto;
+  -webkit-font-smoothing: antialiased;
+}
+html[lang="zh"] body { font-size: 17px; line-height: 1.75; }
+button, input { font: inherit; color: inherit; }
+a { color: inherit; }
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 2px; }
+.sans { font-family: var(--sans); }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+.page { max-width: 1120px; margin: 0 auto; padding: 0 20px; }
+.measure { max-width: var(--measure); }
+
+/* ── progress ── */
+.progress { position: fixed; inset: 0 0 auto 0; height: 3px; z-index: 20; pointer-events: none; }
+.progress span { display: block; height: 100%; width: 0; background: var(--ink); }
+
+/* ── masthead ── */
+.masthead { padding-top: 18px; }
+.topline { display: flex; justify-content: space-between; align-items: center; }
+.wordmark { display: inline-flex; align-items: center; }
+.wordmark .lockup { height: 27px; width: auto; display: block; }
+.langs { display: flex; gap: 10px; }
+.langs button {
+  font: 500 14px/1 var(--sans); background: none; border: 0; padding: 10px 2px;
+  color: var(--graphite); cursor: pointer;
+}
+.langs button[aria-pressed="true"] { color: var(--ink); text-decoration: underline 2px; text-underline-offset: 6px; }
+.date {
+  font-weight: 400; font-size: 44px; line-height: 1.02; letter-spacing: -0.02em;
+  margin: 30px 0 10px; font-variation-settings: "opsz" 72;
+}
+html[lang="zh"] .date { font-size: 38px; letter-spacing: 0; line-height: 1.2; }
+.dek { font: 400 15px/1.4 var(--sans); color: var(--graphite); margin: 0 0 18px; }
+.world { display: block; width: 100%; max-width: var(--measure); height: auto; margin: 4px 0 8px; }
+.coverage { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0; padding: 0; list-style: none; }
+.coverage li { font: 500 13px/1.3 var(--sans); color: var(--graphite); }
+.coverage b { color: var(--ink); font-weight: 600; }
+.squares { display: flex; gap: 3px; margin-bottom: 6px; }
+.squares i { width: 10px; height: 10px; background: var(--ink); display: block; }
+
+/* ── today in 3 ── */
+.today { margin-top: 34px; }
+.label { font: 600 14px/1.3 var(--sans); margin: 0 0 6px; }
+.t3 { list-style: none; margin: 0; padding: 0; }
+.t3 a {
+  display: block; padding: 12px 0; border-bottom: 1px solid var(--hairline);
+  font-size: 21px; line-height: 1.3; text-decoration: none; font-variation-settings: "opsz" 24;
+}
+.t3 li:first-child a { border-top: 1px solid var(--ink); }
+.t3 li:last-child a { border-bottom: 0; }
+html[lang="zh"] .t3 a { font-size: 19px; line-height: 1.55; }
+
+/* ── stories ── */
+.story { padding: 36px 0 34px; border-top: 1px solid var(--hairline); }
+.story.is-top { border-top: 2px solid var(--ink); margin-top: 40px; }
+.meta { font: 400 14px/1.3 var(--sans); color: var(--graphite); margin: 0; display: flex; gap: 10px; flex-wrap: wrap; }
+.meta .region { color: var(--ink); font-weight: 600; }
+.meta { align-items: center; }
+.logo {
+  width: 28px; height: 28px; flex: none; display: inline-flex; align-items: center; justify-content: center;
+  background: #FFFFFF; border: 1px solid var(--hairline); border-radius: 7px;
+}
+.logo svg { width: 20px; height: 20px; display: block; }
+.brief .logo { width: 24px; height: 24px; border-radius: 6px; }
+.brief .logo svg { width: 17px; height: 17px; }
+.title {
+  font-weight: 500; font-size: 25px; line-height: 1.18; letter-spacing: -0.01em;
+  margin: 8px 0 12px; font-variation-settings: "opsz" 36; text-wrap: balance;
+}
+.is-top .title { font-size: 32px; line-height: 1.12; letter-spacing: -0.015em; font-variation-settings: "opsz" 60; }
+html[lang="zh"] .title { font-weight: 600; letter-spacing: 0; line-height: 1.35; font-size: 22px; text-wrap: pretty; }
+html[lang="zh"] .is-top .title { font-size: 27px; line-height: 1.3; }
+.summary { margin: 0 0 4px; }
+
+.mark {
+  cursor: pointer; padding: 0 .12em; margin: 0 -.04em; border-radius: 2px;
+  background: linear-gradient(to bottom, transparent .2em, var(--marker) .2em, var(--marker) calc(100% - .06em), transparent calc(100% - .06em));
+  -webkit-box-decoration-break: clone; box-decoration-break: clone;
+}
+.mark[aria-expanded="true"] { box-shadow: inset 0 -2px 0 var(--ink); }
+.proof {
+  background: var(--marker-soft); border-radius: 4px; padding: 12px 14px; margin: 8px 0 14px;
+  font: 400 14px/1.45 var(--sans);
+}
+.proof-head { font-weight: 600; margin: 0 0 4px; }
+.proof-quote { font: italic 400 16px/1.45 var(--serif); margin: 0 0 6px; }
+.proof-meta { color: var(--graphite); margin: 0; }
+
+.why { background: var(--stone); border-radius: 4px; padding: 14px 16px 16px; margin-top: 16px; }
+.why p:last-child, .next p:last-child { margin: 0; font-size: 17px; line-height: 1.5; }
+html[lang="zh"] .why p:last-child, html[lang="zh"] .next p:last-child { font-size: 16px; line-height: 1.7; }
+.next { padding: 14px 16px 0; }
+
+.sources { margin-top: 14px; font: 400 14px/1.4 var(--sans); color: var(--graphite); }
+.sources-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 14px; }
+.text-btn {
+  font: 600 14px/1.3 var(--sans); color: var(--ink); background: none; border: 0; padding: 10px 0;
+  text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+}
+.source-list { list-style: none; padding: 0; margin: 2px 0 0; }
+.source-list li { display: grid; grid-template-columns: 5.8rem 1fr auto; gap: 2px 12px; padding: 9px 0; border-top: 1px solid var(--hairline); align-items: baseline; }
+html[lang="zh"] .source-list li { grid-template-columns: 4.8rem 1fr auto; }
+.source-list .kind { color: var(--ink); font-weight: 600; }
+.source-list a { color: var(--ink); font-weight: 500; }
+
+/* ── ask ── */
+.story-ask { margin-top: 22px; font-family: var(--sans); }
+.ask-label { font: 600 14px/1.3 var(--sans); color: var(--green); margin: 0 0 4px; }
+.ask-list { list-style: none; margin: 0; padding: 0; }
+.ask-q, .ask-own {
+  display: flex; width: 100%; justify-content: space-between; align-items: center; gap: 14px;
+  text-align: left; background: none; border: 0; border-top: 1px solid var(--hairline);
+  padding: 12px 0; min-height: 46px; font: 400 16px/1.4 var(--sans); cursor: pointer;
+}
+.ask-own { font-weight: 600; color: var(--green); border-bottom: 1px solid var(--hairline); }
+.pm { flex: none; width: 12px; height: 12px; position: relative; }
+.pm::before, .pm::after { content: ""; position: absolute; background: var(--green); }
+.pm::before { left: 0; right: 0; top: 5px; height: 2px; }
+.pm::after { top: 0; bottom: 0; left: 5px; width: 2px; transition: transform .18s ease; }
+[aria-expanded="true"] > .pm::after { transform: scaleY(0); }
+
+.answer { background: var(--mint); border-radius: 4px; padding: 14px 16px; margin: 0 0 12px; font: 400 16px/1.5 var(--sans); }
+.answer.is-new { animation: reveal .24s ease-out; }
+@keyframes reveal { from { opacity: 0; transform: translateY(-4px); } }
+.status { display: flex; align-items: center; gap: 8px; font: 600 13px/1.3 var(--sans); color: var(--green); margin: 0 0 6px; }
+.dot { width: 9px; height: 9px; border-radius: 50%; flex: none; border: 1.5px solid var(--green); }
+.dot.answered { background: var(--green); }
+.dot.partial { background: linear-gradient(90deg, var(--green) 50%, transparent 50%); }
+.answer-text { margin: 0 0 10px; }
+.cite-ref {
+  font: 700 11px/0 var(--sans); color: var(--green); text-decoration: none;
+  vertical-align: super; padding: 0 1px 0 2px;
+}
+.cites { list-style: none; margin: 0; padding: 10px 0 0; border-top: 1px solid rgba(10, 90, 57, .2); }
+.cites li { font: 400 13.5px/1.45 var(--sans); color: var(--green-soft); margin: 0 0 8px; }
+.cite-n { font-weight: 700; color: var(--green); margin-right: 6px; }
+.cite-quote { display: block; font: italic 400 15px/1.45 var(--serif); color: var(--ink); margin: 2px 0; }
+.cite-quote:lang(zh), .cite-quote:lang(ja), .proof-quote:lang(zh), .proof-quote:lang(ja) { font-style: normal; }
+.answer-foot { font: 400 12.5px/1.4 var(--sans); color: var(--green-soft); margin: 4px 0 0; }
+.answer-foot .text-btn { font-size: 12.5px; padding: 4px 0; color: var(--green-soft); }
+.look-further { display: block; margin-top: 8px; font: 600 14px/1.3 var(--sans); color: var(--green); background: none; border: 1px solid var(--green); border-radius: 999px; padding: 10px 16px; cursor: pointer; }
+.look-note { margin: 8px 0 0; font-size: 13px; color: var(--green-soft); }
+
+/* ── visuals: our charts, or the source's own image ── */
+.visual { margin: 18px 0 4px; }
+.fg-title { font: 600 14px/1.35 var(--sans); margin: 0; }
+.fg-note { font: 400 13px/1.4 var(--sans); color: var(--graphite); margin: 2px 0 12px; }
+.fg-credit { font: 400 12.5px/1.45 var(--sans); color: var(--graphite); margin: 10px 0 0; }
+.fg-rows { font: 400 14px/1.3 var(--sans); }
+.fg-row { display: grid; grid-template-columns: 7.2rem 1fr; align-items: center; column-gap: 10px; }
+.fg-row + .fg-row { margin-top: 6px; }
+.fg-track { display: flex; align-items: center; gap: 8px; border-left: 1px solid #CFCDC6; min-height: 28px; }
+.fg-bar { display: block; height: 20px; border-radius: 0 4px 4px 0; flex: none; }
+.fg-bar.focus { background: var(--ink); }
+.fg-bar.ctx { background: #8A887F; }
+.fg-val { font-weight: 600; white-space: nowrap; }
+.fg-axis { display: grid; grid-template-columns: 1fr 1fr; font: 400 12px/1.2 var(--sans); color: var(--graphite); margin-bottom: 6px; }
+.fg-axis span:first-child { text-align: right; padding-right: 8px; }
+.fg-axis span:last-child { padding-left: 8px; }
+.fg-change .fg-label { display: block; margin: 8px 0 4px; }
+.fg-div { display: grid; grid-template-columns: 1fr 1fr; }
+.fg-half { display: flex; align-items: center; gap: 8px; min-height: 28px; }
+.fg-half.neg { flex-direction: row-reverse; }
+.fg-half.pos { border-left: 1px solid #CFCDC6; }
+.fg-half.neg .fg-bar { border-radius: 4px 0 0 4px; }
+.photo-frame { aspect-ratio: 3 / 2; border-radius: 4px; overflow: hidden; background: var(--stone); }
+.photo-frame svg { display: block; width: 100%; height: 100%; }
+
+/* ── in brief ── */
+.briefs { margin-top: 8px; padding-top: 34px; border-top: 2px solid var(--ink); }
+.section-title { font: 500 26px/1.2 var(--serif); margin: 0 0 6px; letter-spacing: -0.01em; }
+html[lang="zh"] .section-title { font-weight: 600; letter-spacing: 0; }
+.brief-list { list-style: none; padding: 0; margin: 0; }
+.brief { padding: 14px 0; border-top: 1px solid var(--hairline); }
+.brief:first-child { border-top: 0; }
+.brief-text { margin: 4px 0 2px; font-size: 17px; line-height: 1.5; }
+.brief-src { font: 400 13.5px/1.4 var(--sans); color: var(--graphite); margin: 0; }
+.rumor { font-style: italic; }
+
+/* ── done ── */
+.done { margin-top: 30px; padding: 48px 0 40px; border-top: 2px solid var(--ink); }
+.done-title { font: 500 36px/1.08 var(--serif); letter-spacing: -0.02em; margin: 0 0 10px; font-variation-settings: "opsz" 60; }
+html[lang="zh"] .done-title { font-weight: 600; font-size: 30px; letter-spacing: 0; line-height: 1.3; text-wrap: balance; }
+.done-sub { font: 400 16px/1.45 var(--sans); color: var(--graphite); margin: 0 0 30px; }
+.feedback p { font: 600 15px/1.3 var(--sans); margin: 0 0 10px; }
+.fb-btns { display: flex; gap: 10px; }
+.chip-btn {
+  font: 500 15px/1 var(--sans); background: none; border: 1px solid var(--ink); border-radius: 999px;
+  padding: 0 18px; min-height: 44px; cursor: pointer;
+}
+.chip-btn[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.fb-thanks { font: 400 14px/1.4 var(--sans) !important; color: var(--graphite); margin-top: 10px !important; }
+.subscribe { margin-top: 34px; font-family: var(--sans); }
+.subscribe label { display: block; font: 600 15px/1.3 var(--sans); margin: 0 0 10px; }
+.row { display: flex; gap: 8px; }
+.row input {
+  flex: 1; min-width: 0; font: 400 16px/1.2 var(--sans); padding: 12px 12px; min-height: 46px;
+  border: 1px solid var(--ink); border-radius: 4px; background: var(--paper);
+}
+.solid-btn {
+  font: 600 16px/1 var(--sans); background: var(--ink); color: var(--paper); border: 0; border-radius: 4px;
+  padding: 0 18px; min-height: 46px; cursor: pointer; white-space: nowrap;
+}
+.fine { font: 400 13px/1.4 var(--sans); color: var(--graphite); margin: 8px 0 0; }
+.done-links { display: flex; flex-wrap: wrap; gap: 4px 22px; margin-top: 26px; }
+.done-links .text-btn { font-weight: 500; }
+
+/* ── footer ── */
+.foot { padding: 26px 0 72px; border-top: 1px solid var(--hairline); font: 400 13px/1.5 var(--sans); color: var(--graphite); }
+.foot p { margin: 0 0 8px; }
+.foot-links { display: flex; gap: 18px; }
+.foot-links a { color: var(--ink); }
+
+/* ── ask sheet ── */
+.sheet-root { position: fixed; inset: 0; z-index: 40; }
+.sheet-root[hidden] { display: none; }
+.sheet-backdrop { position: absolute; inset: 0; background: rgba(0, 0, 0, .32); }
+.sheet {
+  position: absolute; left: 0; right: 0; bottom: 0; max-height: 90%;
+  display: flex; flex-direction: column; background: var(--paper); border-radius: 14px 14px 0 0;
+  padding: 8px 20px calc(14px + env(safe-area-inset-bottom)); font-family: var(--sans);
+  animation: sheet-up .26s cubic-bezier(.2, .8, .2, 1);
+}
+@keyframes sheet-up { from { transform: translateY(24px); opacity: .4; } }
+.handle { width: 36px; height: 4px; border-radius: 2px; background: var(--hairline); margin: 0 auto 10px; flex: none; }
+.sheet-head { display: flex; justify-content: space-between; align-items: center; }
+.sheet-title { font: 600 14px/1.3 var(--sans); color: var(--green); margin: 0; }
+.sheet-story { font: 500 19px/1.25 var(--serif); margin: 2px 0 6px; letter-spacing: -0.005em; }
+html[lang="zh"] .sheet-story { font-weight: 600; font-size: 17px; line-height: 1.5; }
+.sheet-note { font: 400 13.5px/1.4 var(--sans); color: var(--graphite); margin: 0 0 12px; }
+.sheet-body { overflow: auto; flex: 1; min-height: 80px; }
+.thread-q { font: 600 16px/1.4 var(--sans); margin: 4px 0 8px; }
+.sheet-form { flex: none; padding-top: 10px; border-top: 1px solid var(--hairline); }
+.quota { font: 400 12.5px/1.3 var(--sans); color: var(--graphite); margin: 8px 0 0; }
+.gate { background: var(--mint); border-radius: 4px; padding: 16px; }
+.gate p { margin: 0 0 12px; font: 400 15px/1.45 var(--sans); }
+
+/* ── desktop: answers sit in a margin column beside the story ── */
+@media (min-width: 1024px) {
+  .page { padding: 0 48px; }
+  .date { font-size: 60px; }
+  .story { display: grid; grid-template-columns: minmax(0, var(--measure)) minmax(15rem, 21rem); column-gap: 64px; align-items: start; }
+  .story-ask { margin-top: 0; padding: 4px 0 0 24px; border-left: 1px solid var(--hairline); position: sticky; top: 24px; }
+  .sheet { left: auto; top: 24px; right: 24px; bottom: 24px; width: 440px; max-height: none; border-radius: 10px; padding-top: 18px; }
+  .handle { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+
+/* ── email view ── */
+body.email-view { background: var(--stone); }
+.email { max-width: 600px; margin: 0 auto; background: var(--paper); padding: 22px 20px 30px; }
+.email-head { font: 400 13px/1.45 var(--sans); color: var(--graphite); border-bottom: 1px solid var(--hairline); padding-bottom: 12px; margin-bottom: 4px; }
+.email-head b { color: var(--ink); font-weight: 600; }
+.email .story { padding: 28px 0 26px; }
+.email .is-top { margin-top: 28px; }
+.email-ask { font: 600 15px/1.4 var(--sans); margin: 14px 0 0; display: flex; flex-wrap: wrap; gap: 4px 18px; }
+.email-ask a { color: var(--green); }
+.email-ask a + a { color: var(--ink); font-weight: 500; }
+.email-foot { font: 400 12.5px/1.5 var(--sans); color: var(--graphite); padding-top: 22px; border-top: 1px solid var(--hairline); margin-top: 28px; }
+.email-foot a { color: var(--ink); }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="progress" aria-hidden="true"><span></span></div>
+<div class="sheet-root" id="sheet" hidden></div>
+
+<script>
+/* ───────── sample content (fictional companies and stories) ───────── */
+
+// Land as a 2° dot grid, generated from Natural Earth 1:110m land (public domain).
+const WORLD = {"step":2,"top":82,"rows":[[[43,1],[45,11],[58,25],[137,1]],[[37,2],[43,3],[47,5],[56,24],[96,5],[138,4]],[[30,2],[42,1],[45,5],[54,27],[98,1],[141,2]],[[34,3],[40,1],[42,1],[44,6],[61,19],[118,2],[133,13],[159,3],[163,2]],[[28,3],[32,1],[36,1],[40,1],[42,2],[45,4],[50,2],[62,17],[116,2],[130,21],[152,2]],[[0,1],[11,2],[28,1],[31,7],[42,2],[46,8],[64,13],[78,1],[102,2],[117,1],[123,3],[127,28],[156,10],[168,1],[179,1]],[[8,13],[22,9],[33,3],[38,1],[41,1],[43,3],[47,2],[52,4],[64,13],[99,9],[120,3],[124,2],[127,47],[175,5]],[[0,3],[8,41],[53,5],[63,10],[97,14],[112,1],[114,12],[127,53]],[[2,2],[7,39],[47,1],[51,6],[64,6],[79,4],[96,5],[103,4],[108,1],[110,70]],[[8,37],[54,2],[57,1],[65,4],[94,5],[101,79]],[[7,7],[15,28],[51,4],[66,3],[93,6],[101,67],[170,1],[172,4]],[[9,4],[21,22],[51,4],[57,1],[93,6],[102,59],[166,1],[170,1]],[[11,1],[23,22],[52,7],[87,2],[94,1],[96,2],[101,58],[168,4]],[[8,1],[25,24],[51,10],[86,3],[94,1],[100,58],[168,3]],[[25,24],[51,11],[85,2],[88,2],[92,70],[168,1]],[[26,36],[88,2],[91,69],[161,1]],[[27,1],[29,27],[57,1],[61,2],[89,71],[161,1]],[[28,30],[63,1],[89,70],[161,1]],[[28,28],[57,2],[89,7],[97,8],[107,1],[109,5],[116,42]],[[28,27],[85,7],[95,2],[99,5],[110,4],[116,41],[160,2]],[[28,26],[86,4],[94,1],[97,2],[100,4],[105,10],[117,38],[160,1]],[[28,24],[85,5],[98,1],[100,2],[103,12],[117,32],[153,1],[160,1]],[[29,23],[87,2],[93,3],[97,1],[104,11],[117,34],[153,2],[158,2]],[[30,22],[87,8],[102,1],[106,1],[108,42],[153,1],[156,4]],[[31,19],[86,10],[108,42],[155,2]],[[32,17],[85,14],[100,4],[105,46]],[[34,8],[49,1],[85,29],[115,36]],[[33,1],[35,6],[49,1],[83,24],[108,7],[117,33]],[[34,1],[36,5],[83,24],[109,7],[117,1],[123,27]],[[37,4],[48,2],[82,26],[109,11],[125,23],[150,1]],[[37,4],[45,2],[51,1],[81,28],[110,9],[125,9],[136,8]],[[38,4],[44,2],[54,1],[82,27],[111,8],[126,6],[137,6],[144,1]],[[40,6],[82,27],[111,6],[127,4],[137,7],[150,1]],[[44,4],[81,29],[111,4],[127,3],[139,5],[150,1]],[[46,2],[82,29],[112,1],[127,3],[139,6],[150,1]],[[47,1],[52,4],[82,30],[114,2],[128,2],[139,1],[142,2],[152,1]],[[48,1],[50,1],[52,8],[83,32],[128,1],[130,1],[139,1],[142,1]],[[51,10],[84,31],[130,1],[152,1]],[[51,13],[85,2],[88,1],[93,21],[138,1],[140,2],[147,2]],[[51,14],[95,18],[139,1],[141,1],[146,3]],[[50,15],[95,17],[139,2],[145,4],[150,1]],[[50,17],[94,17],[140,2],[145,4],[155,2]],[[50,20],[95,15],[141,2],[145,3],[149,2],[154,1],[156,1],[158,3]],[[49,23],[96,14],[142,1],[151,1],[159,4]],[[50,23],[96,14],[143,3],[159,5],[168,1]],[[51,21],[96,14],[148,1],[152,1],[160,2],[163,1],[170,1]],[[51,20],[97,13]],[[52,19],[96,14],[114,1],[155,3],[161,1]],[[52,19],[96,14],[114,1],[152,6],[161,2],[173,1]],[[54,16],[96,13],[112,3],[151,8],[161,2]],[[55,15],[96,12],[112,3],[151,12]],[[55,15],[97,11],[112,2],[148,17],[172,1]],[[55,13],[97,11],[112,2],[147,18]],[[55,11],[97,10],[112,1],[147,19]],[[55,11],[98,8],[147,20]],[[54,11],[98,8],[147,20]],[[54,11],[99,6],[148,19]],[[54,10],[99,5],[148,4],[157,9]],[[54,7],[148,1],[159,6],[176,1]],[[53,9],[160,5],[177,1]],[[53,6],[177,2]],[[53,4],[58,1],[162,2],[176,2]],[[54,4],[163,1],[175,2]],[[53,4],[174,2]],[[53,4]],[[52,4],[124,1]],[[52,3]],[[53,3]],[[54,2]]]};
+
+// Fictional company logos for the sample issue. Real logos come from each company's
+// press kit, unaltered, and identify the company only.
+const LOGOS = {
+  qilin: { name: 'Qilin Lab', svg: '<rect width="24" height="24" rx="5" fill="#0F766E"/><circle cx="11.3" cy="11.3" r="5" fill="none" stroke="#fff" stroke-width="2.2"/><path d="M14.4 14.4l4 4" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>' },
+  northwind: { name: 'Northwind', svg: '<circle cx="12" cy="12" r="12" fill="#2F6FED"/><path d="M7.6 16.4V7.6l8.8 8.8V7.6" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>' },
+  aster: { name: 'Aster', svg: '<g stroke="#E8590C" stroke-width="2.6" stroke-linecap="round"><path d="M12 3.5v17M3.5 12h17M6 6l12 12M18 6L6 18"/></g>' },
+  lingxin: { name: 'Lingxin', svg: '<rect width="24" height="24" rx="5" fill="#D7263D"/><rect x="7.5" y="7.5" width="9" height="9" rx="1.5" fill="none" stroke="#fff" stroke-width="2"/><path d="M10 4.5v2M14 4.5v2M10 17.5v2M14 17.5v2M4.5 10h2M4.5 14h2M17.5 10h2M17.5 14h2" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>' },
+  harbor: { name: 'Harbor Cloud', svg: '<rect width="24" height="24" rx="5" fill="#1E3A5F"/><path d="M4 9.5c2.7-2.7 5.3 2.7 8 0s5.3 2.7 8 0" fill="none" stroke="#7FB2E5" stroke-width="2" stroke-linecap="round"/><path d="M4 14.5c2.7-2.7 5.3 2.7 8 0s5.3 2.7 8 0" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/>' },
+  kumo: { name: 'Kumo', svg: '<path d="M7.4 18.5a4.6 4.6 0 0 1-.5-9.17 5.6 5.6 0 0 1 10.8.3 4.4 4.4 0 0 1-.6 8.87z" fill="#0EA5E9"/>' },
+};
+
+function logoHTML(key) {
+  const l = LOGOS[key];
+  return l ? `<span class="logo" role="img" aria-label="${esc(l.name)}"><svg viewBox="0 0 24 24" aria-hidden="true">${l.svg}</svg></span>` : '';
+}
+
+// Brand lockup: "AI in" plus the monoline emblem, a 5 inside a ring.
+const LOCKUP = '<svg class="lockup" viewBox="-10 -1742 6892 2144" fill="currentColor" aria-hidden="true"><path transform="translate(0.0 0)" d="M344 -555V-615H1051V-555ZM1337 -72 1493 -29V0H938V-29L1120 -70L620 -1202H645L200 -77L390 -29V0H-19V-29L134 -80L682 -1450H720Z"/><path transform="translate(1474.0 0)" d="M632 -29V0H68V-29L247 -71V-1360L68 -1401V-1430H632V-1401L453 -1360V-71Z"/><path transform="translate(2678.0 0)" d="M268 -1202Q205 -1202 168.5 -1245.0Q132 -1288 132 -1341Q132 -1394 168.5 -1432.5Q205 -1471 268 -1471Q331 -1471 365.5 -1432.5Q400 -1394 400 -1341Q400 -1288 365.5 -1245.0Q331 -1202 268 -1202ZM376 -1055V-860V-57L519 -27V0H49V-27L192 -57V-856Q181 -863 159.0 -877.0Q137 -891 108.5 -909.0Q80 -927 49 -946V-964L372 -1055Z"/><path transform="translate(3251.0 0)" d="M373 -860V-57L516 -27V0H46V-27L189 -57V-856Q173 -866 143.5 -884.5Q114 -903 46 -946V-964L369 -1055H373ZM693 -27 837 -57V-700Q837 -767 813.5 -812.0Q790 -857 742.0 -879.5Q694 -902 618 -902Q539 -902 467.5 -880.5Q396 -859 349 -836L336 -857Q414 -915 471.5 -952.0Q529 -989 574.0 -1009.0Q619 -1029 659.0 -1036.5Q699 -1044 744 -1044Q891 -1044 956.0 -965.5Q1021 -887 1021 -717V-57L1164 -27V0H693Z"/><g transform="translate(4738 -1742) scale(21.4400)"><g fill="none" stroke="currentColor" stroke-width="5.6" stroke-linecap="round" stroke-linejoin="round"><path d="M50 6A44 44 0 1 1 50 94A44 44 0 1 1 50 6Z"/><path d="M67 21L37 21L36 46A19.47 19.47 0 1 1 32.81 68.67"/></g></g></svg>';
+
+const REGIONS = {
+  us: { en: 'US', zh: '美国' },
+  cn: { en: 'China', zh: '中国' },
+  eu: { en: 'Europe', zh: '欧洲' },
+  jp: { en: 'Japan', zh: '日本' },
+};
+const LANGS = {
+  en: { en: 'English', zh: '英文' },
+  zh: { en: 'Chinese', zh: '中文' },
+  fr: { en: 'French', zh: '法文' },
+  ja: { en: 'Japanese', zh: '日文' },
+};
+const KINDS = {
+  official: { en: 'Official', zh: '官方' },
+  reported: { en: 'Reported', zh: '媒体报道' },
+  rumor: { en: 'Rumor', zh: '传闻' },
+};
+
+const STORIES = [
+  {
+    id: 'qilin', region: 'cn', top: true, org: 'qilin',
+    place: { en: 'Hangzhou', zh: '杭州', lon: 120.16, lat: 30.27 },
+    visual: {
+      type: 'compare',
+      title: { en: 'Running cost compared with similar closed models', zh: '运行成本：与同级闭源模型相比' },
+      note: { en: 'Qilin’s own estimate, not independently verified', zh: '麒麟自己的测算，未经独立验证' },
+      rows: [
+        { label: { en: 'Closed models', zh: '闭源模型' }, value: 1, shown: { en: '1', zh: '1' } },
+        { label: { en: 'Qilin Q3', zh: '麒麟 Q3' }, value: 0.125, shown: { en: '1/8', zh: '1/8' }, mark: 0, focus: true },
+      ],
+      credit: { en: 'Chart: AI in 5, from Qilin Lab’s figures', zh: '图表：AI in 5，数据来自麒麟实验室' },
+    },
+    sources: [
+      { kind: 'official', name: { en: 'Qilin Lab blog', zh: '麒麟实验室官方博客' }, lang: 'zh', time: '2026-10-11T14:10Z' },
+      { kind: 'reported', name: { en: 'Harbor Tech Daily', zh: 'Harbor Tech Daily' }, lang: 'en', time: '2026-10-11T16:02Z' },
+      { kind: 'reported', name: { en: 'The Ledger', zh: 'The Ledger' }, lang: 'en', time: '2026-10-11T18:40Z', paywall: true },
+    ],
+    marks: [
+      { src: 0, quote: '推理成本约为同级闭源模型的八分之一', tr: { en: 'Running cost is about one-eighth that of comparable closed models.' } },
+      { src: 0, quote: '在代码与数学评测中，与领先闭源模型的差距在 3 分以内', tr: { en: 'On coding and math benchmarks, within 3 points of leading closed models.' } },
+    ],
+    ask: [
+      { status: 'answered', cites: [
+        { src: 0, quote: '模型权重以允许商用的许可证发布……完整模型需 8 张 80GB GPU，量化版本可在 2 张上运行', tr: { en: 'Weights are released under a license that permits commercial use… the full model needs eight 80GB GPUs, and a quantized version runs on two.' } },
+      ] },
+      { status: 'answered', cites: [
+        { src: 0, quote: '根据我们的测算', tr: { en: 'According to our estimates' } },
+        { src: 1, quote: 'Qilin says the model costs about an eighth as much to run, a figure we could not independently verify.', tr: { zh: '麒麟称该模型的运行成本约为八分之一，我们无法独立核实这一数字。' } },
+      ] },
+      { status: 'none', cites: [
+        { src: 0, quote: '与领先闭源模型相比', tr: { en: 'Compared with leading closed models' } },
+      ] },
+    ],
+    freeform: {
+      cites: [{ src: 0, quote: '完整模型需 8 张 80GB GPU，量化版本可在 2 张上运行', tr: { en: 'The full model needs eight 80GB GPUs; a quantized version runs on two.' } }],
+      en: { q: 'Does it run on a Mac?', a: 'These sources don’t mention Macs or Apple chips. They only list the GPUs needed to run it on servers[1].' },
+      zh: { q: '能在 Mac 上运行吗？', a: '这些来源没有提到 Mac 或苹果芯片，只给出了在服务器上运行所需的显卡配置[1]。' },
+    },
+    en: {
+      cat: 'Open models',
+      title: 'Qilin Lab open-sources a 70B model at 1/8 the running cost',
+      summary: 'The Hangzhou lab released the weights of its Q3 model and a 40-page technical report. Qilin says Q3 costs <m0>one-eighth</m0> as much to run as comparable closed models, and scores within <m1>3 points</m1> of them on coding and math tests.',
+      why: 'Running a near-frontier model on your own servers is now realistic for mid-size companies. That weakens the pricing power of closed labs.',
+      next: 'Independent benchmark results. No one outside Qilin has reproduced its numbers yet.',
+      sourceLine: 'Official announcement, plus 2 reports',
+      ask: [
+        { q: 'Can I run it on my own servers?', a: 'Yes. The weights are released under a license that allows commercial use[1]. Qilin says the full model needs eight 80GB GPUs, and a compressed version runs on two[1].' },
+        { q: 'Is the one-eighth cost figure independent?', a: 'No. It is Qilin’s own estimate[1]. Harbor Tech Daily repeats the figure and says it could not verify it[2].' },
+        { q: 'How does it compare with Northwind’s newest model?', a: 'These sources don’t compare Q3 with any Northwind model. They only compare it with “leading closed models” as a group[1].' },
+      ],
+    },
+    zh: {
+      cat: '开源模型',
+      title: '麒麟实验室开源 70B 模型，运行成本仅为闭源模型的 1/8',
+      summary: '这家杭州实验室公开了 Q3 的模型权重和一份 40 页的技术报告。官方称，Q3 的运行成本约为同级闭源模型的<m0>八分之一</m0>，在代码和数学评测中与它们的差距在 <m1>3 分以内</m1>。',
+      why: '中型公司在自己的服务器上运行接近一线水平的模型，开始变得现实。闭源实验室的定价权会因此被削弱。',
+      next: '独立评测的结果。目前还没有第三方复现麒麟公布的数据。',
+      sourceLine: '官方公告，另有 2 家媒体报道',
+      ask: [
+        { q: '能部署在自己的服务器上吗？', a: '可以。模型权重采用允许商用的许可证发布[1]。官方称，完整模型需要 8 张 80GB 显卡，压缩版本 2 张即可运行[1]。' },
+        { q: '“八分之一”的成本是独立测出来的吗？', a: '不是。这是麒麟自己的测算[1]。Harbor Tech Daily 转述了这个数字，并表示无法独立核实[2]。' },
+        { q: '和 Northwind 最新的模型比怎么样？', a: '这些来源没有拿 Q3 和 Northwind 的任何模型直接比较，只笼统地和“领先的闭源模型”做了对比[1]。' },
+      ],
+    },
+  },
+  {
+    id: 'northwind', region: 'us', org: 'northwind',
+    place: { en: 'San Francisco', zh: '旧金山', lon: -122.42, lat: 37.77 },
+    visual: {
+      type: 'image', art: 'settings',
+      alt: { en: 'Northwind’s settings screen with Memory switched on', zh: 'Northwind 设置页，记忆功能已开启' },
+      credit: { en: 'Image: Northwind, from its announcement', zh: '图片：Northwind，取自官方公告' },
+    },
+    sources: [
+      { kind: 'official', name: { en: 'Northwind blog', zh: 'Northwind 官方博客' }, lang: 'en', time: '2026-10-11T17:00Z' },
+    ],
+    marks: [
+      { src: 0, quote: 'Starting today, memory is on for all 30 million Plus and Team subscribers.', tr: { zh: '从今天起，全部 3,000 万 Plus 和 Team 订阅用户的记忆功能都已开启。' } },
+    ],
+    ask: [
+      { status: 'answered', cites: [
+        { src: 0, quote: 'You can turn memory off at any time in Settings > Personalization. Existing memories stay until you delete them.', tr: { zh: '你可以随时在“设置 > 个性化”中关闭记忆。已有的记忆会保留，直到你手动删除。' } },
+      ] },
+      { status: 'answered', cites: [
+        { src: 0, quote: 'Memory will roll out to the EU and UK later this year.', tr: { zh: '记忆功能将于今年晚些时候在欧盟和英国推出。' } },
+      ] },
+    ],
+    en: {
+      cat: 'Products',
+      title: 'Northwind’s assistant now remembers past chats, on by default',
+      summary: 'Northwind switched on long-term memory for its <m0>30 million</m0> paying users. People can see, edit or delete what it remembers in settings.',
+      why: 'Memory makes an assistant harder to leave. Turning it on by default will also draw attention from privacy regulators, especially in Europe.',
+      sourceLine: 'Official announcement',
+      ask: [
+        { q: 'How do I turn it off?', a: 'Go to Settings, then Personalization, and switch off Memory[1]. Turning it off doesn’t delete what’s already stored. You delete that separately[1].' },
+        { q: 'Is it available in Europe?', a: 'Not yet. Northwind says it will come to the EU and UK “later this year”[1].' },
+      ],
+    },
+    zh: {
+      cat: '产品',
+      title: 'Northwind 助手默认开启记忆，会记住你以前的对话',
+      summary: 'Northwind 为 <m0>3,000 万</m0>付费用户默认打开了长期记忆。用户可以在设置里查看、修改或删除它记住的内容。',
+      why: '有了记忆，用户更难离开这个助手。默认开启也会引来隐私监管机构的关注，欧洲尤其如此。',
+      sourceLine: '官方公告',
+      ask: [
+        { q: '怎么关闭？', a: '在“设置 > 个性化”里关闭“记忆”即可[1]。关闭后，已经记住的内容不会自动删除，需要另外手动删除[1]。' },
+        { q: '欧洲能用吗？', a: '暂时不能。Northwind 表示将在“今年晚些时候”向欧盟和英国开放[1]。' },
+      ],
+    },
+  },
+  {
+    id: 'aster', region: 'eu', org: 'aster',
+    place: { en: 'Paris', zh: '巴黎', lon: 2.35, lat: 48.86 },
+    sources: [
+      { kind: 'official', name: { en: 'Aster press release', zh: 'Aster 新闻稿' }, lang: 'en', time: '2026-10-11T07:30Z' },
+      { kind: 'reported', name: { en: 'Le Signal', zh: 'Le Signal' }, lang: 'fr', time: '2026-10-11T09:15Z' },
+    ],
+    marks: [
+      { src: 0, quote: '…at a post-money valuation of €6 billion.', tr: { zh: '……投后估值为 60 亿欧元。' } },
+    ],
+    ask: [
+      { status: 'answered', cites: [
+        { src: 0, quote: 'The round was led by Fonds Méridien and Nordkapp Ventures.', tr: { zh: '本轮由 Fonds Méridien 和 Nordkapp Ventures 领投。' } },
+        { src: 1, quote: 'Selon nos informations, un fabricant américain de puces participe également.', tr: { en: 'According to our information, an American chipmaker is also taking part.', zh: '据我们了解，一家美国芯片制造商也参与了本轮融资。' } },
+      ] },
+    ],
+    en: {
+      cat: 'Funding',
+      title: 'Paris lab Aster raises €600M to build models in 24 languages',
+      summary: 'The round values Aster at <m0>€6 billion</m0>. It plans to train models on all 24 official EU languages and release its smallest model openly.',
+      why: 'Europe’s leading bet on home-grown models now has real money, though still far less than the largest US labs raise in a single round.',
+      sourceLine: 'Official announcement, plus 1 report',
+      ask: [
+        { q: 'Who invested?', a: 'Two European funds led the round, according to Aster[1]. Le Signal reports that a US chipmaker also took part. Aster hasn’t confirmed that[2].' },
+      ],
+    },
+    zh: {
+      cat: '融资',
+      title: '巴黎实验室 Aster 融资 6 亿欧元，要做覆盖 24 种语言的模型',
+      summary: '本轮融资后，Aster 估值达到 <m0>60 亿欧元</m0>。它计划用欧盟全部 24 种官方语言训练模型，并开源其中最小的一个。',
+      why: '欧洲押注的本土大模型终于有了真金白银，但和美国头部实验室单轮融资的规模相比仍差得远。',
+      sourceLine: '官方公告，另有 1 家媒体报道',
+      ask: [
+        { q: '谁投的钱？', a: '据 Aster 公告，本轮由两家欧洲基金领投[1]。Le Signal 报道称还有一家美国芯片公司参投，Aster 尚未证实[2]。' },
+      ],
+    },
+  },
+  {
+    id: 'lingxin', region: 'cn', org: 'lingxin',
+    place: { en: 'Shenzhen', zh: '深圳', lon: 114.06, lat: 22.54 },
+    visual: {
+      type: 'image', art: 'chip',
+      alt: { en: 'Product photo of Lingxin’s N2 chip', zh: '灵芯 N2 芯片产品图' },
+      credit: { en: 'Image: Lingxin, from its announcement', zh: '图片：灵芯，取自官方公告' },
+    },
+    sources: [
+      { kind: 'official', name: { en: 'Lingxin announcement', zh: '灵芯官方公告' }, lang: 'zh', time: '2026-10-11T02:00Z' },
+      { kind: 'reported', name: { en: 'Harbor Tech Daily', zh: 'Harbor Tech Daily' }, lang: 'en', time: '2026-10-11T05:20Z' },
+    ],
+    marks: [
+      { src: 0, quote: 'N2 可在端侧以每秒 30 个 token 的速度运行 70 亿参数模型', tr: { en: 'N2 runs a 7-billion-parameter model on the device at 30 tokens per second.' } },
+    ],
+    ask: [
+      { status: 'partial', cites: [
+        { src: 1, quote: 'Two Chinese handset makers said they would ship phones with the N2, without naming models.', tr: { zh: '两家中国手机厂商表示将推出搭载 N2 的手机，但未透露具体型号。' } },
+      ] },
+    ],
+    en: {
+      cat: 'Hardware',
+      title: 'Shenzhen’s Lingxin starts mass-producing an AI chip for phones',
+      summary: 'Lingxin says its N2 chip runs a 7-billion-parameter model on the phone itself at <m0>30 tokens per second</m0>. Two phone makers have announced handsets that use it.',
+      why: 'Running AI on the phone cuts cloud costs and keeps data on the device. China’s phone makers now have a domestic chip for it.',
+      sourceLine: 'Official announcement, plus 1 report',
+      ask: [
+        { q: 'Which phones will use it?', a: 'Two phone makers have announced handsets with the N2[1]. The sources don’t name the models or say when they go on sale[1].' },
+      ],
+    },
+    zh: {
+      cat: '硬件',
+      title: '深圳灵芯开始量产手机 AI 芯片',
+      summary: '灵芯称，它的 N2 芯片能在手机上以<m0>每秒 30 个 token</m0> 的速度运行 70 亿参数的模型。已有两家手机厂商宣布将推出搭载这款芯片的机型。',
+      why: '在手机上直接运行 AI，既能省下云端成本，也能让数据留在设备里。中国手机厂商现在有了国产芯片可选。',
+      sourceLine: '官方公告，另有 1 家媒体报道',
+      ask: [
+        { q: '哪些手机会用它？', a: '已有两家手机厂商宣布推出搭载 N2 的机型[1]，但来源没有提到具体型号和上市时间[1]。' },
+      ],
+    },
+  },
+  {
+    id: 'cobalt', region: 'us',
+    place: { en: 'Boston', zh: '波士顿', lon: -71.06, lat: 42.36 },
+    visual: {
+      type: 'change',
+      title: { en: 'Change after six months with AI coding assistants', zh: '使用 AI 编程助手六个月后的变化' },
+      axis: { en: ['Decrease', 'Increase'], zh: ['减少', '增加'] },
+      rows: [
+        { label: { en: 'Code review time', zh: '代码审查时间' }, value: -35, shown: { en: '−35%', zh: '−35%' }, mark: 0 },
+        { label: { en: 'Fixes after release', zh: '上线后的修复' }, value: 20, shown: { en: '+20%', zh: '+20%' }, mark: 1 },
+      ],
+      credit: { en: 'Chart: AI in 5, from the Cobalt University paper', zh: '图表：AI in 5，数据来自 Cobalt 大学论文' },
+    },
+    sources: [
+      { kind: 'official', name: { en: 'Cobalt University paper', zh: 'Cobalt 大学论文' }, lang: 'en', time: '2026-10-10T22:00Z' },
+    ],
+    marks: [
+      { src: 0, quote: 'median code review time fell by 35%', tr: { zh: '代码审查时间的中位数下降了 35%' } },
+      { src: 0, quote: 'post-release defect fixes increased by 20%', tr: { zh: '上线后的缺陷修复增加了 20%' } },
+    ],
+    ask: [
+      { status: 'none', cites: [
+        { src: 0, quote: 'participants used commercial AI coding assistants', tr: { zh: '参与者使用的是商用 AI 编程助手' } },
+      ] },
+    ],
+    en: {
+      cat: 'Research',
+      title: 'Study of 1,200 developers finds AI-written code needs more fixes',
+      summary: 'Researchers at Cobalt University followed teams for six months. Time spent on code review fell by <m0>35%</m0>, but fixes after release rose by <m1>20%</m1>.',
+      why: 'It is one of the largest real-world studies of AI coding tools so far. It suggests part of the speed gain is paid back later.',
+      sourceLine: 'Research paper',
+      ask: [
+        { q: 'Which tools did they test?', a: 'The paper doesn’t name the tools. It describes them only as “commercial AI coding assistants”[1].' },
+      ],
+    },
+    zh: {
+      cat: '研究',
+      title: '1,200 名开发者的研究：AI 写的代码返工更多',
+      summary: 'Cobalt 大学的研究人员跟踪多个团队长达六个月。代码审查用时<m0>减少了 35%</m0>，但上线后的修复工作<m1>增加了 20%</m1>。',
+      why: '这是目前规模最大的 AI 编程工具实地研究之一。它说明一部分提速，要在后面还回去。',
+      sourceLine: '研究论文',
+      ask: [
+        { q: '测试的是哪些工具？', a: '论文没有点名具体工具，只说是“商用 AI 编程助手”[1]。' },
+      ],
+    },
+  },
+];
+
+const BRIEFS = [
+  { region: 'us', org: 'harbor', place: { lon: -122.33, lat: 47.61 }, kind: 'official', src: { en: 'Harbor Cloud pricing page', zh: 'Harbor Cloud 价格页面' },
+    en: 'Harbor Cloud cut GPU rental prices by 15% in all US regions.',
+    zh: 'Harbor Cloud 将美国所有区域的 GPU 租用价格下调 15%。' },
+  { region: 'cn', place: { lon: 120.16, lat: 30.27 }, kind: 'rumor', src: { en: 'Harbor Tech Daily, citing unnamed people', zh: 'Harbor Tech Daily，援引匿名人士' },
+    en: 'Qilin Lab is said to be in talks to raise new funding. The company hasn’t commented.',
+    zh: '传闻麒麟实验室正在洽谈新一轮融资，公司未予置评。' },
+  { region: 'jp', org: 'kumo', place: { lon: 139.69, lat: 35.69 }, kind: 'official', src: { en: 'Kumo blog, in Japanese', zh: 'Kumo 官方博客（日文）' },
+    en: 'Tokyo-based Kumo released a speech model that handles 12 Asian languages.',
+    zh: '东京的 Kumo 发布了支持 12 种亚洲语言的语音模型。' },
+];
+
+const UI = {
+  en: {
+    date: 'October 12',
+    dek: 'Monday’s issue: 8 stories, about 4 minutes',
+    coverageLabel: 'Where today’s stories come from',
+    todayIn3: 'Today in 3',
+    t3: [
+      ['qilin', 'A Chinese lab open-sourced a near-top model that costs one-eighth as much to run.'],
+      ['northwind', 'Northwind’s assistant now remembers your chats unless you switch it off.'],
+      ['aster', 'Paris-based Aster raised €600M to build models in all 24 EU languages.'],
+    ],
+    why: 'Why it matters', next: 'What to watch',
+    seeSources: 'See sources', hideSources: 'Hide sources', open: 'Open', paywall: 'paywall',
+    ask: 'Ask', askOwn: 'Ask your own question', askAbout: 'Questions about this story',
+    matches: 'Matches the source', translatedFrom: (l) => `Translated from ${l}`,
+    status: { answered: 'Answered from the sources', partial: 'Partly covered by the sources', none: 'Not covered by the sources' },
+    answerFoot: 'AI answer, checked against this story’s sources.', report: 'Report a problem', reportedThanks: 'Thanks. This answer will be rechecked.',
+    inBrief: 'In brief', rumorTag: 'Rumor, unconfirmed',
+    doneTitle: 'You’re caught up.', doneSub: 'The next issue arrives tomorrow at 7:00, your local time.',
+    useful: 'Was this issue useful?', yes: 'Useful', no: 'Not really', thanks: 'Thanks. This helps choose tomorrow’s stories.',
+    subLabel: 'Get it in your inbox every morning', subBtn: 'Subscribe', subFine: 'One email a day. Unsubscribe in one click.',
+    subDone: 'Check your inbox to confirm your email.',
+    share: 'Share this issue', shared: 'Link copied', yesterday: 'Read yesterday’s issue',
+    footer: 'Written by AI. Every number and quote is checked against its source.',
+    how: 'How it’s made', corrections: 'Corrections', archive: 'Archive',
+    sample: 'Sample issue. All companies and stories are fictional.',
+    sheetTitle: 'Ask about this story', sheetNote: (n) => `Answers come only from this story’s ${n} ${n === 1 ? 'source' : 'sources'}.`,
+    close: 'Close',
+    gateText: 'Asking your own questions is free for subscribers. You’ll also get each issue at 7:00, your local time.',
+    gateBtn: 'Subscribe and ask', placeholder: 'Ask about this story', askBtn: 'Ask',
+    quota: (n) => `${n} ${n === 1 ? 'question' : 'questions'} left today`,
+    lookFurther: 'Search beyond these sources',
+    lookNote: 'Takes about a minute. Results link every claim to where it came from and are marked as not checked.',
+    genericNone: 'These sources don’t cover that. They focus on what the story reports[1].',
+    emailFrom: 'From', emailSubject: 'Subject', emailAsk: 'Ask about this story', emailWeb: 'Read on the web',
+    emailFoot: 'You’re getting this because you subscribed to AI in 5.',
+    unsubscribe: 'Unsubscribe', changeLang: 'Read in Chinese', address: 'AI in 5, [postal address]',
+  },
+  zh: {
+    date: '10 月 12 日',
+    dek: '星期一，8 条新闻，约 4 分钟',
+    coverageLabel: '今天的新闻来自哪里',
+    todayIn3: '今日三件事',
+    t3: [
+      ['qilin', '中国实验室开源接近一线水平的模型，运行成本只要八分之一。'],
+      ['northwind', 'Northwind 助手开始默认记住你的对话，除非你手动关闭。'],
+      ['aster', '巴黎的 Aster 融资 6 亿欧元，要做覆盖欧盟 24 种语言的模型。'],
+    ],
+    why: '为什么重要', next: '接下来关注',
+    seeSources: '查看来源', hideSources: '收起来源', open: '打开', paywall: '付费墙',
+    ask: '追问', askOwn: '自己提问', askAbout: '关于这条新闻的问题',
+    matches: '与原文一致', translatedFrom: (l) => `译自${l}`,
+    status: { answered: '来源中有答案', partial: '来源只提到一部分', none: '来源中没有提到' },
+    answerFoot: 'AI 回答，已与本条来源核对。', report: '报错', reportedThanks: '收到，这条回答会被重新核对。',
+    inBrief: '快讯', rumorTag: '传闻，未证实',
+    doneTitle: '今天的 AI，你已经跟上了。', doneSub: '下一期会在明天早上 7 点（你的当地时间）送到。',
+    useful: '这期有用吗？', yes: '有用', no: '一般', thanks: '收到，这会帮助我们挑选明天的新闻。',
+    subLabel: '每天早上送到你的邮箱', subBtn: '订阅', subFine: '每天只有 1 封，随时一键退订。',
+    subDone: '请到邮箱里点击确认。',
+    share: '分享这期', shared: '链接已复制', yesterday: '看昨天那期',
+    footer: '由 AI 撰写。每个数字和引语都已与原始来源核对。',
+    how: '生产方法', corrections: '更正记录', archive: '往期',
+    sample: '示例内容，公司和新闻均为虚构。',
+    sheetTitle: '就这条新闻提问', sheetNote: (n) => `回答只依据本条的 ${n} 个来源。`,
+    close: '关闭',
+    gateText: '订阅后即可免费自己提问。每天早上 7 点（当地时间），你还会收到当天的简报。',
+    gateBtn: '订阅并提问', placeholder: '输入关于这条新闻的问题', askBtn: '提问',
+    quota: (n) => `今天还可以问 ${n} 次`,
+    lookFurther: '在更多来源中查找',
+    lookNote: '大约需要 1 分钟。结果中的每个说法都会附上出处，并标注为“未经核对”。',
+    genericNone: '这些来源没有谈到这一点，它们只涉及这条新闻报道的内容[1]。',
+    emailFrom: '发件人', emailSubject: '主题', emailAsk: '就这条新闻提问', emailWeb: '在网页上阅读',
+    emailFoot: '你收到这封邮件，是因为你订阅了 AI in 5。',
+    unsubscribe: '退订', changeLang: 'Read in English', address: 'AI in 5，[通讯地址]',
+  },
+};
+
+/* ───────── state ───────── */
+
+const params = new URLSearchParams(location.search);
+let lang = params.get('lang') === 'zh' ? 'zh' : (params.get('lang') === 'en' ? 'en' : ((navigator.language || 'en').toLowerCase().startsWith('zh') ? 'zh' : 'en'));
+const view = params.get('view') === 'email' ? 'email' : 'web';
+let subscribed = false;
+let quota = 3;
+let sheetStory = null;
+let thread = [];
+
+const $ = (sel, root = document) => root.querySelector(sel);
+const sep = () => (lang === 'zh' ? '：' : ': ');
+const story = (id) => STORIES.find((s) => s.id === id);
+const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+function fmtTime(iso) {
+  const d = new Date(iso);
+  if (lang === 'zh') {
+    return `${d.getUTCMonth() + 1} 月 ${d.getUTCDate()} 日 ${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')} UTC`;
+  }
+  const mon = d.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' });
+  return `${mon} ${d.getUTCDate()}, ${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')} UTC`;
+}
+
+/* ───────── rendering ───────── */
+
+function withMarks(s, text, interactive) {
+  return text.replace(/<m(\d)>(.*?)<\/m\1>/g, (_, i, inner) => interactive
+    ? `<span class="mark" role="button" tabindex="0" data-action="mark" data-id="${s.id}" data-m="${i}" aria-expanded="false" aria-controls="proof-${s.id}">${inner}</span>`
+    : `<span class="mark">${inner}</span>`);
+}
+
+function withCites(text, key) {
+  return text.replace(/\[(\d)\]/g, (_, n) => `<a class="cite-ref" href="#${key}-${n}" aria-label="Source ${n}">${n}</a>`);
+}
+
+function quoteBlock(s, c) {
+  const src = s.sources[c.src];
+  const needsTr = src.lang !== lang && c.tr && c.tr[lang];
+  return { src, needsTr };
+}
+
+function answerHTML(s, status, text, cites, key, opts = {}) {
+  const T = UI[lang];
+  const citeItems = cites.map((c, i) => {
+    const src = s.sources[c.src];
+    const tr = src.lang !== lang && c.tr && c.tr[lang] ? `<span>${esc(T.translatedFrom(LANGS[src.lang][lang]))}${sep()}${esc(c.tr[lang])}</span>` : '';
+    return `<li id="${key}-${i + 1}"><span class="cite-n">${i + 1}</span>${esc(KINDS[src.kind][lang])}${sep()}${esc(src.name[lang])}<span class="cite-quote" lang="${src.lang}">“${esc(c.quote)}”</span>${tr}</li>`;
+  }).join('');
+  const further = status === 'none' && opts.further
+    ? `<button class="look-further" data-action="further">${esc(T.lookFurther)}</button><p class="look-note" hidden>${esc(T.lookNote)}</p>` : '';
+  return `<div class="answer${opts.isNew ? ' is-new' : ''}">
+    <p class="status"><span class="dot ${status}" aria-hidden="true"></span>${esc(T.status[status])}</p>
+    <p class="answer-text">${withCites(esc(text), key)}</p>
+    <ol class="cites">${citeItems}</ol>
+    ${further}
+    <p class="answer-foot">${esc(T.answerFoot)} <button class="text-btn" data-action="report">${esc(T.report)}</button></p>
+  </div>`;
+}
+
+function coverageHTML() {
+  const counts = {};
+  [...STORIES.map((s) => s.region), ...BRIEFS.map((b) => b.region)].forEach((r) => { counts[r] = (counts[r] || 0) + 1; });
+  const items = Object.entries(counts).map(([r, n]) => `<li><b>${esc(REGIONS[r][lang])}</b> ${n}</li>`).join('');
+  return `${worldMapHTML()}<ul class="coverage" aria-label="${esc(UI[lang].coverageLabel)}">${items}</ul>`;
+}
+
+// A stand-in for an image published with the official announcement. It is drawn in
+// the source's own visual style on purpose: official images keep their look and get a credit.
+function officialScreenshotSVG() {
+  return `<svg viewBox="0 0 600 400" role="img" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, system-ui, sans-serif">
+    <rect width="600" height="400" fill="#E8ECF2"/>
+    <rect x="150" y="34" width="300" height="340" rx="26" fill="#FFFFFF"/>
+    <text x="178" y="82" font-size="19" font-weight="700" fill="#14171C">Personalization</text>
+    <rect x="178" y="104" width="244" height="1" fill="#E3E6EB"/>
+    <text x="178" y="140" font-size="15" font-weight="600" fill="#14171C">Memory</text>
+    <text x="178" y="160" font-size="11.5" fill="#6B7380">Remembers details from your chats</text>
+    <rect x="368" y="126" width="46" height="26" rx="13" fill="#2F6FED"/>
+    <circle cx="401" cy="139" r="10" fill="#FFFFFF"/>
+    <rect x="178" y="182" width="244" height="1" fill="#E3E6EB"/>
+    <text x="178" y="216" font-size="15" font-weight="600" fill="#14171C">Reference past chats</text>
+    <text x="178" y="236" font-size="11.5" fill="#6B7380">Uses earlier chats in answers</text>
+    <rect x="368" y="202" width="46" height="26" rx="13" fill="#2F6FED"/>
+    <circle cx="401" cy="215" r="10" fill="#FFFFFF"/>
+    <rect x="178" y="258" width="244" height="1" fill="#E3E6EB"/>
+    <text x="178" y="292" font-size="15" font-weight="600" fill="#2F6FED">Manage memories</text>
+    <text x="178" y="312" font-size="11.5" fill="#6B7380">See, edit or delete what’s stored</text>
+  </svg>`;
+}
+
+// Grid coordinates: one unit per 2° of longitude/latitude.
+const gx = (lon) => (lon + 180) / WORLD.step;
+const gy = (lat) => (WORLD.top - lat) / WORLD.step;
+
+function landPath(x0 = 0, y0 = 0, x1 = 180, y1 = 69) {
+  let d = '';
+  WORLD.rows.forEach((runs, r) => {
+    const y = r + 0.5;
+    if (y < y0 || y > y1) return;
+    runs.forEach(([start, len]) => {
+      for (let c = start; c < start + len; c += 1) {
+        const x = c + 0.5;
+        if (x >= x0 && x <= x1) d += `M${x} ${y}h0`;
+      }
+    });
+  });
+  return d;
+}
+
+function worldMapHTML() {
+  const T = UI[lang];
+  const seen = new Set();
+  const pins = [...STORIES, ...BRIEFS].map((s) => s.place).filter((p) => {
+    const k = `${p.lon},${p.lat}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+  return `<svg class="world" viewBox="0 0 180 69" role="img" aria-label="${esc(T.coverageLabel)}">
+    <path d="${landPath()}" stroke="#BEBBB3" stroke-width="0.7" stroke-linecap="round" fill="none"/>
+    ${pins.map((p) => `<circle cx="${gx(p.lon).toFixed(2)}" cy="${gy(p.lat).toFixed(2)}" r="1.7" fill="#000" stroke="#fff" stroke-width="0.6"/>`).join('')}
+  </svg>`;
+}
+
+// Stand-in for a product photo published with the announcement.
+function officialChipSVG() {
+  return `<svg viewBox="0 0 600 400" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <radialGradient id="bg" cx="50%" cy="38%" r="75%"><stop offset="0" stop-color="#2A3038"/><stop offset="1" stop-color="#0D1013"/></radialGradient>
+      <linearGradient id="die" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4A515B"/><stop offset=".5" stop-color="#2B3037"/><stop offset="1" stop-color="#1B1F24"/></linearGradient>
+      <linearGradient id="pin" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#E2C27A"/><stop offset="1" stop-color="#A9823A"/></linearGradient>
+    </defs>
+    <rect width="600" height="400" fill="url(#bg)"/>
+    <ellipse cx="300" cy="318" rx="150" ry="16" fill="#000" opacity=".45"/>
+    <g fill="url(#pin)">
+      ${Array.from({ length: 12 }, (_, i) => `<rect x="${204 + i * 16}" y="96" width="8" height="14" rx="1.5"/><rect x="${204 + i * 16}" y="290" width="8" height="14" rx="1.5"/><rect x="190" y="${110 + i * 15.4}" width="14" height="8" rx="1.5"/><rect x="396" y="${110 + i * 15.4}" width="14" height="8" rx="1.5"/>`).join('')}
+    </g>
+    <rect x="204" y="110" width="192" height="180" rx="10" fill="url(#die)"/>
+    <rect x="214" y="120" width="172" height="160" rx="6" fill="none" stroke="#5E6670" stroke-width="1"/>
+    <text x="300" y="196" text-anchor="middle" font-family="-apple-system, system-ui, sans-serif" font-size="15" letter-spacing="4" fill="#AEB6C0">LINGXIN</text>
+    <text x="300" y="228" text-anchor="middle" font-family="-apple-system, system-ui, sans-serif" font-size="30" font-weight="700" fill="#D5DBE2">N2</text>
+    <path d="M214 120 L300 120 L214 200 Z" fill="#fff" opacity=".05"/>
+  </svg>`;
+}
+
+function valueHTML(s, row, interactive) {
+  const shown = esc(row.shown[lang]);
+  if (row.mark === undefined) return shown;
+  return interactive
+    ? `<span class="mark" role="button" tabindex="0" data-action="mark" data-id="${s.id}" data-m="${row.mark}" aria-expanded="false" aria-controls="proof-${s.id}">${shown}</span>`
+    : `<span class="mark">${shown}</span>`;
+}
+
+function dataTable(v) {
+  return `<table class="visually-hidden"><caption>${esc(v.title[lang])}</caption><tbody>${v.rows.map((r) => `<tr><th scope="row">${esc(r.label[lang])}</th><td>${esc(r.shown[lang])}</td></tr>`).join('')}</tbody></table>`;
+}
+
+function visualHTML(s, interactive = true) {
+  const v = s.visual;
+  if (!v) return '';
+  if (v.type === 'image') {
+    return `<figure class="visual photo">
+      <div class="photo-frame" role="img" aria-label="${esc(v.alt[lang])}">${v.art === 'chip' ? officialChipSVG() : officialScreenshotSVG()}</div>
+      <figcaption class="fg-credit">${esc(v.credit[lang])}</figcaption>
+    </figure>`;
+  }
+  if (v.type === 'compare') {
+    const max = Math.max(...v.rows.map((r) => r.value));
+    const rows = v.rows.map((r) => `<div class="fg-row"><span class="fg-label">${esc(r.label[lang])}</span>
+        <span class="fg-track"><span class="fg-bar ${r.focus ? 'focus' : 'ctx'}" style="width:calc((100% - 3.4rem) * ${r.value / max})"></span><span class="fg-val">${valueHTML(s, r, interactive)}</span></span></div>`).join('');
+    return `<figure class="visual fact">
+      <figcaption class="fg-title">${esc(v.title[lang])}</figcaption>
+      <p class="fg-note">${esc(v.note[lang])}</p>
+      <div class="fg-rows" aria-hidden="true">${rows}</div>
+      ${dataTable(v)}
+      <p class="fg-credit">${esc(v.credit[lang])}</p>
+    </figure>`;
+  }
+  if (v.type === 'change') {
+    const max = Math.max(...v.rows.map((r) => Math.abs(r.value)));
+    const rows = v.rows.map((r) => {
+      const bar = `<span class="fg-bar focus" style="width:calc((100% - 3.6rem) * ${Math.abs(r.value) / max})"></span><span class="fg-val">${valueHTML(s, r, interactive)}</span>`;
+      return `<div class="fg-change"><span class="fg-label">${esc(r.label[lang])}</span>
+        <div class="fg-div"><span class="fg-half neg">${r.value < 0 ? bar : ''}</span><span class="fg-half pos">${r.value > 0 ? bar : ''}</span></div></div>`;
+    }).join('');
+    return `<figure class="visual fact">
+      <figcaption class="fg-title">${esc(v.title[lang])}</figcaption>
+      <div class="fg-rows" aria-hidden="true" style="margin-top:10px">
+        <div class="fg-axis"><span>${esc(v.axis[lang][0])}</span><span>${esc(v.axis[lang][1])}</span></div>${rows}</div>
+      ${dataTable(v)}
+      <p class="fg-credit">${esc(v.credit[lang])}</p>
+    </figure>`;
+  }
+  return '';
+}
+
+function storyHTML(s) {
+  const T = UI[lang];
+  const L = s[lang];
+  const sources = s.sources.map((src) => {
+    const notes = [src.lang !== lang ? LANGS[src.lang][lang] : '', src.paywall ? T.paywall : ''].filter(Boolean).join(', ');
+    return `<li><span class="kind">${esc(KINDS[src.kind][lang])}</span><span>${esc(src.name[lang])}${notes ? `, ${esc(notes)}` : ''}<br>${esc(fmtTime(src.time))}</span><a href="#" onclick="return false">${esc(T.open)}</a></li>`;
+  }).join('');
+  const asks = L.ask.map((a, i) => `<li>
+      <button class="ask-q" data-action="ask" data-id="${s.id}" data-i="${i}" aria-expanded="false" aria-controls="ans-${s.id}-${i}"><span>${esc(a.q)}</span><span class="pm" aria-hidden="true"></span></button>
+      <div id="ans-${s.id}-${i}" hidden></div>
+    </li>`).join('');
+  return `<article class="story${s.top ? ' is-top' : ''}" id="s-${s.id}">
+    <div class="story-main">
+      <p class="meta">${logoHTML(s.org)}<span class="region">${esc(REGIONS[s.region][lang])}</span><span>${esc(L.cat)}</span></p>
+      <h2 class="title">${esc(L.title)}</h2>
+      <p class="summary">${withMarks(s, L.summary, true)}</p>
+      <div id="proof-${s.id}"></div>
+      ${visualHTML(s)}
+      <div class="why"><p class="label">${esc(T.why)}</p><p>${esc(L.why)}</p></div>
+      ${L.next ? `<div class="next"><p class="label">${esc(T.next)}</p><p>${esc(L.next)}</p></div>` : ''}
+      <div class="sources">
+        <div class="sources-row"><span>${esc(L.sourceLine)}</span><button class="text-btn" data-action="sources" data-id="${s.id}" aria-expanded="false" aria-controls="src-${s.id}">${esc(T.seeSources)}</button></div>
+        <ul class="source-list" id="src-${s.id}" hidden>${sources}</ul>
+      </div>
+    </div>
+    <aside class="story-ask" aria-label="${esc(T.askAbout)}">
+      <p class="ask-label">${esc(T.ask)}</p>
+      <ul class="ask-list">${asks}
+        <li><button class="ask-own" data-action="sheet" data-id="${s.id}"><span>${esc(T.askOwn)}</span></button></li>
+      </ul>
+    </aside>
+  </article>`;
+}
+
+function renderWeb() {
+  const T = UI[lang];
+  const briefs = BRIEFS.map((b) => `<li class="brief">
+      <p class="meta">${logoHTML(b.org)}<span class="region">${esc(REGIONS[b.region][lang])}</span>${b.kind === 'rumor' ? `<span class="rumor">${esc(T.rumorTag)}</span>` : ''}</p>
+      <p class="brief-text">${esc(b[lang])}</p>
+      <p class="brief-src">${esc(KINDS[b.kind][lang])}${sep()}${esc(b.src[lang])}</p>
+    </li>`).join('');
+  return `
+  <header class="masthead page">
+    <div class="topline">
+      <span class="wordmark" role="img" aria-label="AI in 5">${LOCKUP}</span>
+      <nav class="langs" aria-label="Language">
+        <button data-action="lang" data-lang="en" aria-pressed="${lang === 'en'}">EN</button>
+        <button data-action="lang" data-lang="zh" aria-pressed="${lang === 'zh'}">中文</button>
+      </nav>
+    </div>
+    <h1 class="date">${esc(T.date)}</h1>
+    <p class="dek">${esc(T.dek)}</p>
+    ${coverageHTML()}
+  </header>
+  <section class="today page" aria-labelledby="t3">
+    <div class="measure">
+      <h2 class="label" id="t3">${esc(T.todayIn3)}</h2>
+      <ol class="t3">${T.t3.map(([id, text]) => `<li><a href="#s-${id}" data-action="jump" data-id="${id}">${esc(text)}</a></li>`).join('')}</ol>
+    </div>
+  </section>
+  <main class="page">
+    ${STORIES.map(storyHTML).join('')}
+    <section class="briefs measure" aria-labelledby="ib">
+      <h2 class="section-title" id="ib">${esc(T.inBrief)}</h2>
+      <ul class="brief-list">${briefs}</ul>
+    </section>
+    <section class="done measure" id="done">
+      <p class="done-title">${esc(T.doneTitle)}</p>
+      <p class="done-sub">${esc(T.doneSub)}</p>
+      <div class="feedback">
+        <p>${esc(T.useful)}</p>
+        <div class="fb-btns">
+          <button class="chip-btn" data-action="fb" aria-pressed="false">${esc(T.yes)}</button>
+          <button class="chip-btn" data-action="fb" aria-pressed="false">${esc(T.no)}</button>
+        </div>
+        <p class="fb-thanks" hidden>${esc(T.thanks)}</p>
+      </div>
+      <form class="subscribe" data-form="subscribe">
+        <label for="sub-email">${esc(T.subLabel)}</label>
+        <div class="row"><input id="sub-email" type="email" autocomplete="email" placeholder="you@example.com" required><button class="solid-btn" type="submit">${esc(T.subBtn)}</button></div>
+        <p class="fine">${esc(T.subFine)}</p>
+      </form>
+      <div class="done-links">
+        <button class="text-btn" data-action="share">${esc(T.share)}</button>
+        <a class="text-btn" href="#" onclick="return false">${esc(T.yesterday)}</a>
+      </div>
+    </section>
+    <footer class="foot measure">
+      <p>${esc(T.footer)}</p>
+      <p class="foot-links"><a href="#" onclick="return false">${esc(T.how)}</a><a href="#" onclick="return false">${esc(T.corrections)}</a><a href="#" onclick="return false">${esc(T.archive)}</a></p>
+      <p>${esc(T.sample)}</p>
+    </footer>
+  </main>`;
+}
+
+function renderEmail() {
+  const T = UI[lang];
+  const stories = STORIES.map((s) => {
+    const L = s[lang];
+    return `<div class="story${s.top ? ' is-top' : ''}">
+      <p class="meta">${logoHTML(s.org)}<span class="region">${esc(REGIONS[s.region][lang])}</span><span>${esc(L.cat)}</span></p>
+      <h2 class="title">${esc(L.title)}</h2>
+      <p class="summary">${withMarks(s, L.summary, false)}</p>
+      ${visualHTML(s, false)}
+      <div class="why"><p class="label">${esc(T.why)}</p><p>${esc(L.why)}</p></div>
+      <p class="sources">${esc(L.sourceLine)}</p>
+      <p class="email-ask"><a href="#" onclick="return false">${esc(T.emailAsk)}</a><a href="#" onclick="return false">${esc(T.emailWeb)}</a></p>
+    </div>`;
+  }).join('');
+  const briefs = BRIEFS.map((b) => `<li class="brief"><p class="meta">${logoHTML(b.org)}<span class="region">${esc(REGIONS[b.region][lang])}</span>${b.kind === 'rumor' ? `<span class="rumor">${esc(T.rumorTag)}</span>` : ''}</p><p class="brief-text">${esc(b[lang])}</p></li>`).join('');
+  return `<div class="email">
+    <div class="email-head"><b>${esc(T.emailFrom)}</b> AI in 5<br><b>${esc(T.emailSubject)}</b> ${esc(T.t3[0][1])}</div>
+    <div class="masthead"><span class="wordmark" role="img" aria-label="AI in 5">${LOCKUP}</span><h1 class="date">${esc(T.date)}</h1><p class="dek">${esc(T.dek)}</p>${coverageHTML()}</div>
+    <div class="today"><p class="label">${esc(T.todayIn3)}</p><ol class="t3">${T.t3.map(([, text]) => `<li><a href="#" onclick="return false">${esc(text)}</a></li>`).join('')}</ol></div>
+    ${stories}
+    <div class="briefs"><h2 class="section-title">${esc(T.inBrief)}</h2><ul class="brief-list">${briefs}</ul></div>
+    <div class="email-foot">
+      <p>${esc(T.footer)} <a href="#" onclick="return false">${esc(T.how)}</a></p>
+      <p>${esc(T.emailFoot)} <a href="#" onclick="return false">${esc(T.unsubscribe)}</a>. <a href="#" onclick="return false">${esc(T.changeLang)}</a>.</p>
+      <p>${esc(T.address)}</p>
+      <p>${esc(T.sample)}</p>
+    </div>
+  </div>`;
+}
+
+function render() {
+  document.documentElement.lang = lang === 'zh' ? 'zh' : 'en';
+  document.body.classList.toggle('email-view', view === 'email');
+  $('#app').innerHTML = view === 'email' ? renderEmail() : renderWeb();
+  if (sheetStory) renderSheet();
+  onScroll();
+}
+
+/* ───────── interactions ───────── */
+
+function toggleMark(id, m, force) {
+  const s = story(id);
+  const el = document.querySelector(`.mark[data-id="${id}"][data-m="${m}"]`);
+  const slot = $(`#proof-${id}`);
+  const open = force ?? el.getAttribute('aria-expanded') !== 'true';
+  document.querySelectorAll(`.mark[data-id="${id}"]`).forEach((x) => x.setAttribute('aria-expanded', 'false'));
+  if (!open) { slot.innerHTML = ''; return; }
+  el.setAttribute('aria-expanded', 'true');
+  const mk = s.marks[m];
+  const src = s.sources[mk.src];
+  const T = UI[lang];
+  const tr = src.lang !== lang && mk.tr[lang] ? `<p class="proof-meta">${esc(T.translatedFrom(LANGS[src.lang][lang]))}${sep()}${esc(mk.tr[lang])}</p>` : '';
+  slot.innerHTML = `<div class="proof" role="note">
+    <p class="proof-head">${esc(T.matches)}</p>
+    <p class="proof-quote" lang="${src.lang}">“${esc(mk.quote)}”</p>
+    ${tr}
+    <p class="proof-meta">${esc(KINDS[src.kind][lang])}${sep()}${esc(src.name[lang])}, ${esc(fmtTime(src.time))}</p>
+  </div>`;
+}
+
+function toggleAsk(id, i, force) {
+  const s = story(id);
+  const btn = document.querySelector(`.ask-q[data-id="${id}"][data-i="${i}"]`);
+  const box = $(`#ans-${id}-${i}`);
+  const open = force ?? btn.getAttribute('aria-expanded') !== 'true';
+  btn.setAttribute('aria-expanded', String(open));
+  if (!open) { box.hidden = true; box.innerHTML = ''; return; }
+  const a = s.ask[i];
+  box.innerHTML = answerHTML(s, a.status, s[lang].ask[i].a, a.cites, `c-${id}-${i}`, { isNew: true });
+  box.hidden = false;
+}
+
+function openSheet(id) {
+  sheetStory = id;
+  thread = [];
+  renderSheet();
+  $('#sheet').hidden = false;
+  document.body.style.overflow = 'hidden';
+  setTimeout(() => { const f = $('#sheet input'); if (f && !params.get('state')) f.focus(); }, 30);
+}
+
+function closeSheet() {
+  sheetStory = null;
+  $('#sheet').hidden = true;
+  $('#sheet').innerHTML = '';
+  document.body.style.overflow = '';
+}
+
+function renderSheet() {
+  const T = UI[lang];
+  const s = story(sheetStory);
+  const items = thread.map((t, k) => `<p class="thread-q">${esc(t.q)}</p>${answerHTML(s, t.status, t.a, t.cites, `f-${s.id}-${k}`, { further: true, isNew: k === thread.length - 1 })}`).join('');
+  const form = subscribed
+    ? `<form class="sheet-form" data-form="ask"><div class="row"><input type="text" name="q" maxlength="100" placeholder="${esc(T.placeholder)}" aria-label="${esc(T.placeholder)}" ${quota === 0 ? 'disabled' : ''}><button class="solid-btn" type="submit" ${quota === 0 ? 'disabled' : ''}>${esc(T.askBtn)}</button></div><p class="quota">${esc(T.quota(quota))}</p></form>`
+    : `<form class="gate" data-form="gate"><p>${esc(T.gateText)}</p><div class="row"><input type="email" autocomplete="email" placeholder="you@example.com" aria-label="Email" required><button class="solid-btn" type="submit">${esc(T.gateBtn)}</button></div></form>`;
+  $('#sheet').innerHTML = `<div class="sheet-backdrop" data-action="close-sheet"></div>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+      <div class="handle" aria-hidden="true"></div>
+      <div class="sheet-head"><p class="sheet-title" id="sheet-title">${esc(T.sheetTitle)}</p><button class="text-btn" data-action="close-sheet">${esc(T.close)}</button></div>
+      <p class="sheet-story">${esc(s[lang].title)}</p>
+      <p class="sheet-note">${esc(T.sheetNote(s.sources.length))}</p>
+      <div class="sheet-body">${items}</div>
+      ${subscribed ? form : ''}
+      ${subscribed ? '' : form}
+    </div>`;
+  const body = $('#sheet .sheet-body');
+  if (body) body.scrollTop = body.scrollHeight;
+}
+
+function answerFreeform(q) {
+  const s = story(sheetStory);
+  const ff = s.freeform;
+  const ql = q.toLowerCase();
+  for (const [i, a] of s[lang].ask.entries()) {
+    const words = a.q.toLowerCase().replace(/[?？“”’]/g, '').split(/\s+/).filter((w) => w.length > 3);
+    if (words.length && words.filter((w) => ql.includes(w)).length >= 2) {
+      return { q, status: s.ask[i].status, a: a.a, cites: s.ask[i].cites };
+    }
+  }
+  if (ff) return { q, status: 'none', a: ff[lang].a, cites: ff.cites };
+  return { q, status: 'none', a: UI[lang].genericNone, cites: [{ src: s.marks[0].src, quote: s.marks[0].quote, tr: s.marks[0].tr }] };
+}
+
+function submitQuestion(q) {
+  if (!q.trim() || quota === 0) return;
+  thread.push(answerFreeform(q.trim()));
+  quota -= 1;
+  renderSheet();
+}
+
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('[data-action]');
+  if (!t) return;
+  const a = t.dataset.action;
+  if (a === 'lang') { lang = t.dataset.lang; render(); }
+  if (a === 'jump') { e.preventDefault(); $(`#s-${t.dataset.id}`).scrollIntoView({ block: 'start' }); }
+  if (a === 'mark') toggleMark(t.dataset.id, +t.dataset.m);
+  if (a === 'ask') toggleAsk(t.dataset.id, +t.dataset.i);
+  if (a === 'sheet') openSheet(t.dataset.id);
+  if (a === 'close-sheet') closeSheet();
+  if (a === 'sources') {
+    const list = $(`#src-${t.dataset.id}`);
+    const open = t.getAttribute('aria-expanded') !== 'true';
+    t.setAttribute('aria-expanded', String(open));
+    t.textContent = open ? UI[lang].hideSources : UI[lang].seeSources;
+    list.hidden = !open;
+  }
+  if (a === 'fb') {
+    t.parentElement.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b === t)));
+    t.closest('.feedback').querySelector('.fb-thanks').hidden = false;
+  }
+  if (a === 'share') { t.textContent = UI[lang].shared; }
+  if (a === 'report') { t.replaceWith(Object.assign(document.createElement('span'), { textContent: UI[lang].reportedThanks })); }
+  if (a === 'further') { t.nextElementSibling.hidden = false; t.disabled = true; }
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && sheetStory) closeSheet();
+  const t = e.target.closest && e.target.closest('.mark[role="button"]');
+  if (t && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggleMark(t.dataset.id, +t.dataset.m); }
+});
+
+document.addEventListener('submit', (e) => {
+  const f = e.target;
+  e.preventDefault();
+  if (f.dataset.form === 'subscribe') {
+    subscribed = true;
+    f.innerHTML = `<p class="fine" style="font-size:15px;color:var(--ink)">${esc(UI[lang].subDone)}</p>`;
+  }
+  if (f.dataset.form === 'gate') { subscribed = true; renderSheet(); const i = $('#sheet input'); if (i) i.focus(); }
+  if (f.dataset.form === 'ask') submitQuestion(f.q.value);
+});
+
+function onScroll() {
+  const max = document.documentElement.scrollHeight - innerHeight;
+  $('.progress span').style.width = `${max > 0 ? Math.min(100, (scrollY / max) * 100) : 0}%`;
+}
+addEventListener('scroll', onScroll, { passive: true });
+
+/* ───────── preset states for the design board ───────── */
+
+function scrollToEl(el, offset) {
+  window.scrollTo({ top: el.getBoundingClientRect().top + scrollY - offset, behavior: 'instant' });
+}
+
+function applyState() {
+  const st = params.get('state');
+  if (view === 'email') { $('.progress').hidden = true; return; }
+  if (st === 'fact') { toggleMark('qilin', 0, true); scrollToEl($('#s-qilin .meta'), 24); }
+  if (st === 'ask') { toggleAsk('qilin', 0, true); scrollToEl($('#s-qilin .why'), 16); }
+  if (st === 'ask-desktop') { toggleAsk('qilin', 1, true); toggleMark('qilin', 0, true); scrollToEl($('#s-qilin'), 0); }
+  if (st === 'sheet') { subscribed = true; quota = 3; openSheet('qilin'); submitQuestion(story('qilin').freeform[lang].q); scrollToEl($('#s-qilin .why'), 16); }
+  if (st === 'gate') { subscribed = false; openSheet('qilin'); scrollToEl($('#s-qilin .why'), 16); }
+  if (st === 'done') { scrollToEl($('#done'), 0); }
+  if (st === 'chart') { scrollToEl($('#s-qilin .summary'), 16); }
+  if (st === 'image') { scrollToEl($('#s-northwind .meta'), 24); }
+  if (st === 'change') { scrollToEl($('#s-cobalt .meta'), 24); }
+  if (st === 'photo') { scrollToEl($('#s-lingxin .meta'), 24); }
+  if (st === 'noimage') { scrollToEl($('#s-aster .meta'), 24); }
+  if (st === 'briefs') { scrollToEl($('.briefs'), 0); }
+  onScroll();
+}
+
+render();
+(document.fonts ? document.fonts.ready : Promise.resolve()).then(() => setTimeout(applyState, 60));
+</script>
+</body>
+</html>

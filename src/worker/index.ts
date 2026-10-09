@@ -14,6 +14,15 @@
  *   DELETE /api/agents/:agentId/messages    admin  reset the conversation
  *   POST   /api/agents/:agentId/chat        admin  one chat turn (text/event-stream)
  *
+ *   GET    /api/issues/latest?before=DATE   open   newest published issue on or before DATE
+ *   GET    /api/issues                      open   published issues, newest first (archive)
+ *   GET    /api/issues/:date                open   one published issue
+ *   POST   /api/subscribe                   open   join the email list (throttled)
+ *   POST   /api/feedback                    open   "was this issue useful" (throttled)
+ *   POST   /api/reports                     open   "report a problem" (throttled)
+ *   GET    /api/admin/issues                admin  every issue, drafts included
+ *   PUT    /api/admin/issues/:date          admin  validate and store an issue, as draft or published
+ *
  * "admin" routes require the x-admin-password header — but only when the
  * ADMIN_PASSWORD secret is set. Without it the app is open, which is what makes
  * zero-config deploys work; set the secret before sharing the URL.
@@ -35,6 +44,9 @@ import {
   verifyAgent,
 } from './connect';
 import { getConversation, handleChatTurn, resetConversation } from './chat';
+import { IssueValidationError } from '../shared/issue';
+import { getIssue, getLatestIssue, listAllIssues, listIssues, saveIssue, seedSampleIssue } from './issues';
+import { clientKey, recordFeedback, recordReport, subscribe } from './public';
 
 const SERVICE = 'cloudflare-worker-starter';
 
@@ -73,10 +85,17 @@ const adminHeaderOk = (c: { env: Env; req: { header: (name: string) => string | 
   return safeEqual(c.req.header('x-admin-password') ?? '', required);
 };
 
-// Everything except /api/health and /api/state needs the password (when one is set).
+// The reader's routes are the site itself, so they stay open: reading published issues
+// (read-only, cacheable, no agent calls, no credentials) and three throttled,
+// strictly validated writes. None of them touches agents or secrets.
+const isReaderRoute = (method: string, path: string): boolean =>
+  (method === 'GET' && (path === '/api/issues' || path.startsWith('/api/issues/'))) ||
+  (method === 'POST' && (path === '/api/subscribe' || path === '/api/feedback' || path === '/api/reports'));
+
+// Everything else except /api/health and /api/state needs the password (when one is set).
 app.use('/api/*', async (c, next) => {
   const path = new URL(c.req.url).pathname;
-  if (path !== '/api/health' && path !== '/api/state' && !adminHeaderOk(c)) {
+  if (path !== '/api/health' && path !== '/api/state' && !isReaderRoute(c.req.method, path) && !adminHeaderOk(c)) {
     throw new HttpError(401, 'admin_password_invalid', 'This deployment requires the admin password.');
   }
   await next();
@@ -87,6 +106,9 @@ app.use('/api/*', async (c, next) => {
 app.onError((error, c) => {
   if (error instanceof HttpError) {
     return c.json({ error: { code: error.code, message: error.message } }, error.status as 400);
+  }
+  if (error instanceof IssueValidationError) {
+    return c.json({ error: { code: 'invalid_issue', message: error.message } }, 400);
   }
   if (error instanceof ConfigError) {
     return c.json({ error: { code: 'misconfigured', message: error.message } }, 400);
@@ -167,6 +189,59 @@ app.post('/api/agents/:agentId/chat', async (c) => {
     message: body.message,
     waitUntil: (promise) => c.executionCtx.waitUntil(promise),
   });
+});
+
+/* ───────── reader ───────── */
+
+const CACHE = 'public, max-age=60';
+
+app.get('/api/issues/latest', async (c) => {
+  await seedSampleIssue(c.env);
+  c.header('cache-control', CACHE);
+  return c.json(await getLatestIssue(c.env, c.req.query('before') ?? null));
+});
+
+app.get('/api/issues', async (c) => {
+  await seedSampleIssue(c.env);
+  c.header('cache-control', CACHE);
+  return c.json({ issues: await listIssues(c.env) });
+});
+
+app.get('/api/issues/:date', async (c) => {
+  await seedSampleIssue(c.env);
+  c.header('cache-control', CACHE);
+  return c.json(await getIssue(c.env, c.req.param('date')));
+});
+
+const readBody = async (c: { req: { json: () => Promise<unknown> } }) =>
+  (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
+const client = (c: { env: Env; req: { header: (name: string) => string | undefined } }) =>
+  clientKey(c.env, c.req.header('cf-connecting-ip'));
+
+app.post('/api/subscribe', async (c) => {
+  await subscribe(c.env, await readBody(c), await client(c));
+  return c.json({ ok: true });
+});
+
+app.post('/api/feedback', async (c) => {
+  await recordFeedback(c.env, await readBody(c), await client(c));
+  return c.json({ ok: true });
+});
+
+app.post('/api/reports', async (c) => {
+  await recordReport(c.env, await readBody(c), await client(c));
+  return c.json({ ok: true });
+});
+
+/* ───────── admin: issues ───────── */
+
+app.get('/api/admin/issues', async (c) => c.json({ issues: await listAllIssues(c.env) }));
+
+app.put('/api/admin/issues/:date', async (c) => {
+  const body = await readBody(c);
+  const status = body?.status === 'published' ? 'published' : 'draft';
+  const issue = await saveIssue(c.env, c.req.param('date'), body?.issue, status);
+  return c.json({ ok: true, date: issue.date, status });
 });
 
 app.all('/api/*', () => {

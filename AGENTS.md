@@ -40,8 +40,20 @@ The template is designed to be extended and reshaped; these are the load-bearing
    - A2A `messageId`s are derived from stored rows, not random, so retries cannot
      double-bill (`src/worker/chat.ts`).
 7. **Keep new routes behind the admin gate.** Any route added under `/api/` is protected by
-   the `ADMIN_PASSWORD` middleware automatically — do not add exceptions beyond `/api/health`
-   and `/api/state` without a reason as good as theirs.
+   the `ADMIN_PASSWORD` middleware automatically — do not add exceptions beyond `/api/health`,
+   `/api/state` and the reader routes without a reason as good as theirs. The reader routes
+   are the public site itself (`isReaderRoute` in `src/worker/index.ts`): `GET /api/issues*`
+   serves published issues only (read-only, cacheable, no agent calls, no credentials), and
+   `POST /api/subscribe`, `/api/feedback` and `/api/reports` validate strictly and are
+   throttled per salted IP hash. A reader route must never call an agent or touch a secret.
+8. **Keep the reader honest.** Only `status = 'published'` issues reach readers, and every
+   issue passes `validateIssue` (`src/shared/issue.ts`) before it is stored. The fictional
+   sample issue is seeded into the local database under `npm run dev` only, never in a
+   build. Issue text is rendered as React text (marks and citations are tokens, not HTML);
+   images and logos are `<img>` with https or `data:image` sources only.
+9. **The reader and the admin console stay separate.** `/admin` (agents, chat, settings) is
+   reached by URL only and loads its own chunk and stylesheet (`src/app/App.tsx`,
+   `styles.css`); the reader (`src/app/reader/`) follows `docs/design/` and never links to it.
 
 ## Checks
 

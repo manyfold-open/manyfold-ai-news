@@ -1,7 +1,8 @@
 /**
- * The shell: loads /api/state once, routes between the two tabs by location.hash
- * (#chat, #settings — no router dependency), and raises the password gate whenever
- * the deployment requires one and the stored password is missing or wrong.
+ * The admin console at /admin: loads /api/state once, routes between the two tabs by
+ * location.hash (/admin#chat, /admin#settings — no router dependency), and raises the
+ * password gate whenever the deployment requires one and the stored password is
+ * missing or wrong. Nothing in the reader links here.
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -10,6 +11,8 @@ import { api, onUnauthorized } from './api';
 import ChatView from './components/ChatView';
 import SettingsView from './components/SettingsView';
 import PasswordGate from './components/PasswordGate';
+import Logo from './components/Logo';
+import './styles.css';
 
 type Tab = 'chat' | 'settings';
 
@@ -68,13 +71,10 @@ export default function App() {
     <main className="shell">
       <header className="topbar">
         <div className="brand">
-          <span className="brand-mark" aria-hidden>
-            ✳
-          </span>
-          <div>
-            <h1>Manyfold Agent Starter</h1>
-            <p className="muted">Your Cloudflare app, wired to your Manyfold agents.</p>
-          </div>
+          <h1>
+            <Logo />
+          </h1>
+          <p className="muted">Admin: connected agents, chat and settings.</p>
         </div>
         <nav className="tabs" aria-label="Pages">
           <a className={tab === 'chat' ? 'tab active' : 'tab'} href="#chat">
