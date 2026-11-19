@@ -10,6 +10,8 @@ export interface Env extends NarraGatewayEnv {
   ASSETS: Fetcher;
   /** D1 database: issues, subscribers, runs, questions and the rest (src/worker/db.ts). */
   DB: D1Database;
+  /** Workers AI binding for Narra unmentioned group semantic triage. */
+  AI?: Ai;
 
   /** Manyfold API base, e.g. https://api.manyfold.ai */
   MANYFOLD_API_BASE_URL?: string;
