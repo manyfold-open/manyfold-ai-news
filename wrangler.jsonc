@@ -88,11 +88,11 @@
     "CONTACT_EMAIL": "customer-support@netmind.ai",
     // Turnstile on the subscribe form; public. Its secret is TURNSTILE_SECRET_KEY.
     "TURNSTILE_SITE_KEY": "0x4AAAAAAFVggIwuQiiBHXt5",
-    // Narra Messenger gateway runtime (kept off by default until NARRA_AGENT_TOKEN is provisioned).
-    "NARRA_GATEWAY_ENABLED": "off",
-    "NARRA_SYNC": "off",
+    // Narra Messenger gateway runtime (enabled with bound Direct Matrix identity).
+    "NARRA_GATEWAY_ENABLED": "on",
+    "NARRA_SYNC": "on",
     "NARRA_AGENT_ID": "agt_agq66pewgf2ovmibamfujrwdqi",
-    "NARRA_MATRIX_ID": "@agent-4c062afc:matrix.netmind.chat"
+    "NARRA_MATRIX_ID": "@agent-3add8bb6:matrix.netmind.chat"
   }
   // Secrets (npx wrangler secret put NAME), none needed to deploy:
   //   ADMIN_PASSWORD          locks /admin and the admin API
