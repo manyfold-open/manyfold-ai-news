@@ -386,6 +386,22 @@ describe('manyfold-ai-news Narra Gateway', () => {
     const unauth = await worker.fetch(new Request('https://app.manyfold.ai/api/gateway/status'), envWithTokens, ctx);
     expect(unauth.status).toBe(401);
 
+    const unsetAdmin = await worker.fetch(
+      new Request('https://app.manyfold.ai/ai-news/api/gateway/status'),
+      { ...envWithTokens, ADMIN_PASSWORD: '' },
+      ctx,
+    );
+    expect(unsetAdmin.status).toBe(401);
+
+    const unsetWithEmptyHeader = await worker.fetch(
+      new Request('https://app.manyfold.ai/ai-news/api/gateway/status', {
+        headers: { 'x-admin-password': '' },
+      }),
+      { ...envWithTokens, ADMIN_PASSWORD: '' },
+      ctx,
+    );
+    expect(unsetWithEmptyHeader.status).toBe(401);
+
     const wrongPass = await worker.fetch(
       new Request('https://app.manyfold.ai/ai-news/api/gateway/status', {
         headers: { 'x-admin-password': 'wrong-password' },

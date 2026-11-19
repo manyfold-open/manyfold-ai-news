@@ -256,7 +256,8 @@ app.delete('/api/connect/:connectId', async (c) => {
 app.get('/api/agents', async (c) => c.json({ agents: await listConnectedAgents(c.env) }));
 
 app.get('/api/gateway/status', async (c) => {
-  if (!adminHeaderOk(c)) {
+  const required = adminPassword(c.env);
+  if (!required || !safeEqual(c.req.header('x-admin-password') ?? '', required)) {
     throw new HttpError(401, 'admin_password_invalid', 'This deployment requires the admin password.');
   }
   return c.json(await getNarraGatewayStatus(c.env, ai5GatewayConfig));
