@@ -297,6 +297,29 @@ const SPECIFIC_QUERY_RE =
 const LATEST_NEWS_QUERY_RE =
   /(?:today'?s|latest|recent|new)\s+(?:ai\s+)?(?:issue|news|briefing|stories|headlines?|top\s*3|summary)|what'?s\s+(?:new|big|happening)\s+in\s+ai|anything\s+big\s+in\s+ai|today\s+in\s+3|ai\s+in\s+5\s+today|今天(?:有(?:什麼|什么))?\s*(?:ai)?\s*(?:新聞|新闻|要聞|要闻|頭條|头条|快報|快报|大新聞|大新闻)|今日\s*(?:ai)?\s*(?:新聞|新闻|要聞|要闻|三條|三条|簡報|简报|日報|日报|焦點|焦点)|最新(?:一期|的?\s*ai\s*(?:新聞|新闻|簡報|简报|要聞|要闻|消息))|今天的三[條条]/i;
 
+const CJK_CHAR_RE = /[\u3400-\u9FFF\uF900-\uFAFF]/;
+const escapeKeywordRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+function hasSpecKeywordHit(text: string, keywords?: Array<string | RegExp>): boolean {
+  const normalized = (text ?? '').normalize('NFKC').trim();
+  if (!normalized) return false;
+  const lower = normalized.toLowerCase();
+  for (const kw of keywords ?? []) {
+    if (kw instanceof RegExp) {
+      if (kw.test(normalized)) return true;
+      continue;
+    }
+    const needle = kw.normalize('NFKC').trim().toLowerCase();
+    if (!needle) continue;
+    if (CJK_CHAR_RE.test(needle)) {
+      if (lower.includes(needle)) return true;
+    } else if (new RegExp(`(?<![a-z0-9])${escapeKeywordRegex(needle)}(?![a-z0-9])`, 'i').test(normalized)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function isBareGreeting(text: string): boolean {
   return BARE_GREETING_RE.test((text ?? '').trim());
 }
@@ -421,6 +444,31 @@ export async function fastRespondAi5(
   _memories: RecallTurnResult,
 ): Promise<string | null> {
   const effectiveChatType: 'dm' | 'group' = decision.reason === 'dm' ? 'dm' : event.chatType;
+  const cleanText = stripAgentMentions(event.text ?? '', ALL_KNOWN_MENTION_NAMES);
+  const isUnmentionedGroup =
+    effectiveChatType === 'group' &&
+    decision.reason !== 'explicit_mention' &&
+    decision.reason !== 'reply_to_self';
+
+  if (isUnmentionedGroup) {
+    const hasAntiHit = hasSpecKeywordHit(cleanText, AI5_AGENT_SPEC.antiKeywords);
+    const hasDomainHit = hasSpecKeywordHit(cleanText, AI5_AGENT_SPEC.domainKeywords);
+    if (hasAntiHit && !hasDomainHit) {
+      return '[NO_REPLY]';
+    }
+    if (isBareGreeting(cleanText)) {
+      return '[NO_REPLY]';
+    }
+    if (
+      decision.reason === 'active_session' &&
+      !isLatestIssueQuery(event.text, 'group') &&
+      !hasDomainHit &&
+      !SPECIFIC_QUERY_RE.test(cleanText)
+    ) {
+      return '[NO_REPLY]';
+    }
+  }
+
   if (!isLatestIssueQuery(event.text, effectiveChatType)) {
     return null;
   }
@@ -428,7 +476,6 @@ export async function fastRespondAi5(
   const latest = await fetchLatestPublishedIssue(env);
   if (!latest) return null;
 
-  const cleanText = stripAgentMentions(event.text ?? '', ALL_KNOWN_MENTION_NAMES);
   return formatIssueTop3(latest.issue, decision.detectedLang, siteBase(env), {
     voice: Boolean(event.isVoice),
     greeting: effectiveChatType === 'dm' && isBareGreeting(cleanText),
