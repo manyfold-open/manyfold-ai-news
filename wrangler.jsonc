@@ -22,7 +22,7 @@
   // Every 15 minutes: email the published issue to subscribers whose local time is
   // 07:00 to 12:00 (src/worker/email/deliver.ts). Each cron runs as its own invocation.
   "triggers": {
-    "crons": ["30 19 * * *", "30 20 * * *", "*/15 * * * *"]
+    "crons": ["30 19 * * *", "30 20 * * *", "*/15 * * * *", "*/5 * * * *"]
   },
   "upload_source_maps": true,
   // The site is https://app.manyfold.ai/ai-news, next to the other Manyfold apps on that
@@ -61,6 +61,18 @@
       "database_id": "7151c283-03a0-4ac5-a253-ca2a58a8e067"
     }
   ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "NARRA_SYNC_DO", "class_name": "NarraMatrixSync" },
+      { "name": "NARRA_ROOM_DO", "class_name": "NarraRoomCoordinator" }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1-narra-gateway",
+      "new_sqlite_classes": ["NarraMatrixSync", "NarraRoomCoordinator"]
+    }
+  ],
   "vars": {
     // Manyfold API base. Point at https://api-staging.manyfold.ai via .dev.vars for local dev.
     "MANYFOLD_API_BASE_URL": "https://api.manyfold.ai",
@@ -75,7 +87,12 @@
     // Reply-To of every email (the sending domain takes no mail) and the privacy contact.
     "CONTACT_EMAIL": "customer-support@netmind.ai",
     // Turnstile on the subscribe form; public. Its secret is TURNSTILE_SECRET_KEY.
-    "TURNSTILE_SITE_KEY": "0x4AAAAAAFVggIwuQiiBHXt5"
+    "TURNSTILE_SITE_KEY": "0x4AAAAAAFVggIwuQiiBHXt5",
+    // Narra Messenger gateway runtime (kept off by default until NARRA_AGENT_TOKEN is provisioned).
+    "NARRA_GATEWAY_ENABLED": "off",
+    "NARRA_SYNC": "off",
+    "NARRA_AGENT_ID": "agt_agq66pewgf2ovmibamfujrwdqi",
+    "NARRA_MATRIX_ID": "@agent-4c062afc:matrix.netmind.chat"
   }
   // Secrets (npx wrangler secret put NAME), none needed to deploy:
   //   ADMIN_PASSWORD          locks /admin and the admin API

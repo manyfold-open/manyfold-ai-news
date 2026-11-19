@@ -110,9 +110,17 @@ import { handleResendWebhook } from './email/webhook';
 import { pruneOldData } from './retention';
 import { renderPage, renderSitemap } from './pages';
 import { turnstileOn } from './turnstile';
+import {
+  BaseNarraMatrixSync,
+  BaseNarraRoomCoordinator,
+  getNarraGatewayStatus,
+  kickNarraGateway,
+} from '@manyfold/narra-agent-kit/worker';
+import { ai5GatewayConfig } from './narra/gateway';
 
 const SERVICE = 'ai-in-5';
 const EMAIL_CRON = '*/15 * * * *';
+const NARRA_CRON = '*/5 * * * *';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -246,6 +254,13 @@ app.delete('/api/connect/:connectId', async (c) => {
 });
 
 app.get('/api/agents', async (c) => c.json({ agents: await listConnectedAgents(c.env) }));
+
+app.get('/api/gateway/status', async (c) => {
+  if (!adminHeaderOk(c)) {
+    throw new HttpError(401, 'admin_password_invalid', 'This deployment requires the admin password.');
+  }
+  return c.json(await getNarraGatewayStatus(c.env, ai5GatewayConfig));
+});
 
 app.post('/api/agents/:agentId/verify', async (c) =>
   c.json({ agent: await verifyAgent(c.env, c.req.param('agentId')) }),
@@ -553,14 +568,29 @@ function withoutBase(request: Request): Request {
   return new Request(url, request);
 }
 
+export class NarraMatrixSync extends BaseNarraMatrixSync<Env> {
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env, ai5GatewayConfig);
+  }
+}
+
+export class NarraRoomCoordinator extends BaseNarraRoomCoordinator<Env> {
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env, ai5GatewayConfig);
+  }
+}
+
 export default {
   fetch: (request, env, ctx) => app.fetch(withoutBase(request), env, ctx),
   // wrangler.jsonc triggers.crons: the daily pipeline, its one retry (followed by the
-  // daily clean-up of old data), and the 15-minute email tick. Each cron is its own
+  // daily clean-up of old data), the 15-minute email tick, and the 5-minute Narra
+  // Gateway watchdog (a no-op while NARRA_GATEWAY_ENABLED=off). Each cron is its own
   // invocation with its own limits.
   scheduled(controller, env, ctx) {
     const at = new Date(controller.scheduledTime);
-    if (controller.cron === EMAIL_CRON) {
+    if (controller.cron === NARRA_CRON) {
+      ctx.waitUntil(kickNarraGateway(env, ai5GatewayConfig));
+    } else if (controller.cron === EMAIL_CRON) {
       // Counts only: addresses never reach the logs.
       ctx.waitUntil(
         ensureSchema(env.DB)

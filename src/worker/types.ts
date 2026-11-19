@@ -1,9 +1,11 @@
+import type { NarraGatewayEnv } from '@manyfold/narra-agent-kit/worker';
+
 /**
  * Worker-side types. `Env` mirrors the bindings and vars declared in wrangler.jsonc —
  * if you add a binding there, add it here too.
  */
 
-export interface Env {
+export interface Env extends NarraGatewayEnv {
   /** Static build output in dist/client. Non-/api/ requests are served from here. */
   ASSETS: Fetcher;
   /** D1 database: issues, subscribers, runs, questions and the rest (src/worker/db.ts). */
@@ -17,6 +19,10 @@ export interface Env {
   CONFIG_ENCRYPTION_KEY?: string;
   /** Optional: when set, all routes except /api/health and /api/state require x-admin-password. */
   ADMIN_PASSWORD?: string;
+  /** Manyfold agent ID for Narra Gateway diagnostics & A2A fallback lookup. */
+  NARRA_AGENT_ID?: string;
+  /** Matrix user ID for Narra Gateway diagnostics. */
+  NARRA_MATRIX_ID?: string;
 
   /** The public site, base path included, e.g. https://app.manyfold.ai/ai-news. Links in emails, share cards and the sitemap point here. */
   SITE_URL?: string;
