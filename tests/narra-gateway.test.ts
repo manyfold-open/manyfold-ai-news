@@ -19,6 +19,8 @@ import {
   ai5GatewayConfig,
   fastRespondAi5,
   fetchAi5Updates,
+  formatIssueTop3,
+  isLatestIssueQuery,
   resolveAi5A2ACredential,
 } from '../src/worker/narra/gateway';
 import type { Issue } from '../src/shared/issue';
@@ -449,5 +451,139 @@ describe('manyfold-ai-news Narra Gateway', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
     const runs = await db.prepare('SELECT COUNT(*) AS n FROM pipeline_runs').first<{ n: number }>();
     expect(runs?.n ?? 0).toBe(0);
+  });
+
+  it('UC-4: converts Simplified-stored issue content to pure Traditional Chinese when detectedLang is zh-Hant', async () => {
+    const uc4Db = sqliteD1();
+    await uc4Db.exec(
+      `CREATE TABLE IF NOT EXISTS issues (
+        date TEXT PRIMARY KEY,
+        number INTEGER NOT NULL,
+        status TEXT NOT NULL DEFAULT 'draft',
+        data TEXT NOT NULL,
+        published_at TEXT,
+        updated_at TEXT NOT NULL
+      );`,
+    );
+    const uc4Env: Env = { ...baseEnv, DB: uc4Db };
+
+    const hansStoredIssue = makePublishedIssue('2026-11-19', 88);
+    hansStoredIssue.stories[0].title.zh = '网络安全初创完成 5 亿美元轮融资';
+    hansStoredIssue.stories[0].summary.zh =
+      '这家专注于人工智能网络安全防御的公司宣布完成新一轮融资，规模达 <m0>5 亿美元</m0>。';
+    hansStoredIssue.today[0].text.zh = '网络安全平台获 5 亿美元轮融资。';
+    hansStoredIssue.briefs[0].text.zh = '某网络安全实验室公布 2 亿美元新轮融资。';
+    await saveIssue(uc4Env, '2026-11-19', hansStoredIssue, 'published');
+
+    const event = makeEvent({ text: '@AI in 5 今日 AI 新聞' });
+    const decision = await routeEvent(
+      event,
+      { roomId: event.roomId, chatType: 'group', members: [], recentHistory: [] },
+      AI5_AGENT_SPEC,
+      { nowMs: event.timestampMs },
+    );
+    expect(decision.shouldReply).toBe(true);
+    expect(decision.detectedLang).toBe('zh-Hant');
+
+    const emptyMem = { userMemories: [], roomMemories: [], promptSafeLines: [] };
+    const reply = await fastRespondAi5(uc4Env, event, decision, emptyMem);
+    expect(reply).not.toBeNull();
+    expect(reply).toContain('今日焦點');
+    expect(reply).toContain('網絡安全');
+    expect(reply).toContain('億美元');
+    expect(reply).toContain('輪融資');
+    expect(reply).not.toContain('网络安全');
+    expect(reply).not.toContain('亿美元');
+    expect(reply).not.toContain('轮融资');
+
+    // Also verify today-only, briefs-only, and voice branches convert to zh-Hant.
+    const todayOnly = formatIssueTop3(
+      { ...hansStoredIssue, stories: [] },
+      'zh-Hant',
+      'https://app.manyfold.ai/ai-news',
+    );
+    expect(todayOnly).toContain('網絡安全');
+    expect(todayOnly).toContain('億美元');
+    expect(todayOnly).toContain('輪融資');
+    expect(todayOnly).not.toMatch(/网络安全|亿美元|轮融资/);
+
+    const briefsOnly = formatIssueTop3(
+      { ...hansStoredIssue, stories: [], today: [] },
+      'zh-Hant',
+      'https://app.manyfold.ai/ai-news',
+    );
+    expect(briefsOnly).toContain('網絡安全');
+    expect(briefsOnly).toContain('億美元');
+    expect(briefsOnly).toContain('輪融資');
+    expect(briefsOnly).not.toMatch(/网络安全|亿美元|轮融资/);
+
+    const voiceOut = formatIssueTop3(
+      hansStoredIssue,
+      'zh-Hant',
+      'https://app.manyfold.ai/ai-news',
+      { voice: true },
+    );
+    expect(voiceOut).toContain('網絡安全');
+    expect(voiceOut).toContain('億美元');
+    expect(voiceOut).toContain('輪融資');
+    expect(voiceOut).not.toMatch(/网络安全|亿美元|轮融资/);
+  });
+
+  it('UC-12: strips sibling agent mentions cleanly so @問一籤 @AI in 5 今日 AI 新聞 triggers AI5', async () => {
+    const query = '@問一籤 @AI in 5 今日 AI 新聞';
+    expect(isLatestIssueQuery(query, 'group')).toBe(true);
+
+    const event = makeEvent({ text: query });
+    const decision = await routeEvent(
+      event,
+      {
+        roomId: event.roomId,
+        chatType: 'group',
+        members: [
+          { matrixId: '@agent-fortune:matrix.netmind.chat', displayName: '問一籤', isAgent: true },
+          { matrixId: AI5_MATRIX_ID, displayName: 'AI in 5', isAgent: true },
+        ],
+        recentHistory: [],
+      },
+      AI5_AGENT_SPEC,
+      { nowMs: event.timestampMs },
+    );
+    expect(decision.shouldReply).toBe(true);
+    expect(decision.detectedLang).toBe('zh-Hant');
+
+    const emptyMem = { userMemories: [], roomMemories: [], promptSafeLines: [] };
+    const reply = await fastRespondAi5(baseEnv, event, decision, emptyMem);
+    expect(reply).not.toBeNull();
+    expect(reply).toContain('AI in 5 第 42 期（2026-11-19）今日焦點');
+  });
+
+  it('UC-16: DM bare 你好 (via chatType or decision.reason === "dm") returns instant greeting + Top 3 in zh-Hant', async () => {
+    const emptyMem = { userMemories: [], roomMemories: [], promptSafeLines: [] };
+
+    const dmEvent = makeEvent({ chatType: 'dm', text: '你好' });
+    const dmDecision = await routeEvent(
+      dmEvent,
+      { roomId: '!dm:matrix.netmind.chat', chatType: 'dm', members: [], recentHistory: [] },
+      AI5_AGENT_SPEC,
+      { nowMs: dmEvent.timestampMs },
+    );
+    expect(dmDecision.shouldReply).toBe(true);
+    expect(dmDecision.reason).toBe('dm');
+    expect(dmDecision.detectedLang).toBe('zh-Hant');
+
+    const dmReply = await fastRespondAi5(baseEnv, dmEvent, dmDecision, emptyMem);
+    expect(dmReply).not.toBeNull();
+    expect(dmReply).toContain('你好！這是今天 AI in 5 第 42 期的重點速覽（2026-11-19）：');
+    expect(dmReply).toContain('https://app.manyfold.ai/ai-news/zh/2026-11-19/1');
+
+    // Also works when event.chatType is 'group' on the wire but router inferred decision.reason === 'dm'
+    const inferredDmEvent = makeEvent({ chatType: 'group', text: '你好' });
+    const inferredDmReply = await fastRespondAi5(baseEnv, inferredDmEvent, dmDecision, emptyMem);
+    expect(inferredDmReply).toBe(dmReply);
+
+    // And when the user explicitly @mentions AI5 alongside the DM greeting
+    const mentionedDmEvent = makeEvent({ chatType: 'group', text: '@AI in 5 你好' });
+    const mentionedDmReply = await fastRespondAi5(baseEnv, mentionedDmEvent, dmDecision, emptyMem);
+    expect(mentionedDmReply).toBe(dmReply);
   });
 });

@@ -1,5 +1,7 @@
 import {
   sanitizeMobileLinks,
+  stripAgentMentions,
+  toZhHant,
   type AgentSpec,
   type AgentUpdateItem,
   type InboundEvent,
@@ -21,6 +23,24 @@ export const AI5_MATRIX_ID = '@agent-3add8bb6:matrix.netmind.chat';
 const DEFAULT_SITE_URL = 'https://app.manyfold.ai/ai-news';
 const DEFAULT_NARRA_ENDPOINT = 'https://api.netmind.chat';
 const UPDATE_LOOKBACK_MS = 48 * 3_600_000;
+
+export const ALL_KNOWN_MENTION_NAMES = [
+  'AI in 5',
+  'AI5',
+  'ai5',
+  'ai5-chat',
+  'AI新聞',
+  'AI新闻',
+  '問一籤',
+  '问一签',
+  '塔羅大師',
+  '塔罗大师',
+  'Spotted London',
+  'London Chinese Food',
+  'Manyfold Data',
+  'Penny',
+  'Quidpaw',
+] as const;
 
 export const AI5_AGENT_SPEC: AgentSpec = {
   id: 'ai5-chat',
@@ -196,13 +216,17 @@ export function formatIssueTop3(
   options: { voice?: boolean; greeting?: boolean } = {},
 ): string {
   const fieldLang = lang === 'en' ? 'en' : 'zh';
+  const localize = (raw: string): string => {
+    const text = plainText(raw);
+    return lang === 'zh-Hant' ? toZhHant(text) : text;
+  };
   const stories = issue.stories.slice(0, 3);
 
   if (options.voice) {
     const headlines =
       stories.length > 0
-        ? stories.map((s) => plainText(s.title[fieldLang]))
-        : issue.today.slice(0, 3).map((t) => plainText(t.text[fieldLang]));
+        ? stories.map((s) => localize(s.title[fieldLang]))
+        : issue.today.slice(0, 3).map((t) => localize(t.text[fieldLang]));
     const joined = headlines.join('；');
     if (lang === 'zh-Hant') {
       return `AI in 5 第 ${issue.number} 期重點新聞包括：${headlines.join('、')}。想聽哪一條的詳細內容？`;
@@ -233,20 +257,20 @@ export function formatIssueTop3(
   if (stories.length > 0) {
     stories.forEach((story, idx) => {
       const pos = storyPosition(issue, story.id) || idx + 1;
-      const title = plainText(story.title[fieldLang]);
-      const summary = plainText(story.summary[fieldLang]).slice(0, 140);
+      const title = localize(story.title[fieldLang]);
+      const summary = localize(story.summary[fieldLang]).slice(0, 140);
       const url = issueLink(siteUrl, lang, issue.date, pos);
       lines.push(`${idx + 1}. ${title} — ${summary}`);
       lines.push(url);
     });
   } else if (issue.today.length > 0) {
     issue.today.slice(0, 3).forEach((item, idx) => {
-      lines.push(`${idx + 1}. ${plainText(item.text[fieldLang])}`);
+      lines.push(`${idx + 1}. ${localize(item.text[fieldLang])}`);
     });
     lines.push(issueLink(siteUrl, lang, issue.date));
   } else {
     issue.briefs.slice(0, 3).forEach((brief, idx) => {
-      lines.push(`${idx + 1}. ${plainText(brief.text[fieldLang])}`);
+      lines.push(`${idx + 1}. ${localize(brief.text[fieldLang])}`);
     });
     lines.push(issueLink(siteUrl, lang, issue.date));
   }
@@ -276,10 +300,7 @@ export function isBareGreeting(text: string): boolean {
 }
 
 export function isLatestIssueQuery(text: string, chatType: 'dm' | 'group'): boolean {
-  const clean = (text ?? '')
-    .replace(/@[A-Za-z0-9._=\-/+]+:[A-Za-z0-9.-]+(?::\d{1,5})?/g, ' ')
-    .replace(/@(?:AI in 5|ai5-chat|ai5|AI新闻|AI新聞)/gi, ' ')
-    .trim();
+  const clean = stripAgentMentions(text ?? '', ALL_KNOWN_MENTION_NAMES);
   if (!clean) return chatType === 'dm';
   if (chatType === 'dm' && isBareGreeting(clean)) return true;
   if (SPECIFIC_QUERY_RE.test(clean)) return false;
@@ -397,16 +418,18 @@ export async function fastRespondAi5(
   decision: TriageDecision,
   _memories: RecallTurnResult,
 ): Promise<string | null> {
-  if (!isLatestIssueQuery(event.text, event.chatType)) {
+  const effectiveChatType: 'dm' | 'group' = decision.reason === 'dm' ? 'dm' : event.chatType;
+  if (!isLatestIssueQuery(event.text, effectiveChatType)) {
     return null;
   }
 
   const latest = await fetchLatestPublishedIssue(env);
   if (!latest) return null;
 
+  const cleanText = stripAgentMentions(event.text ?? '', ALL_KNOWN_MENTION_NAMES);
   return formatIssueTop3(latest.issue, decision.detectedLang, siteBase(env), {
     voice: Boolean(event.isVoice),
-    greeting: event.chatType === 'dm' && isBareGreeting(event.text),
+    greeting: effectiveChatType === 'dm' && isBareGreeting(cleanText),
   });
 }
 
