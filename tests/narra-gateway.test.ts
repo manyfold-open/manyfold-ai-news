@@ -665,6 +665,13 @@ describe('manyfold-ai-news Narra Gateway', () => {
     expect(heuristicDomainScore(makeEvent({ text: 'AI模型最近表現如何？' }), AI5_AGENT_SPEC, grpCtx)).toBeGreaterThanOrEqual(0.55);
     expect(heuristicDomainScore(makeEvent({ text: 'AI晶片和大模型有什麼消息？' }), AI5_AGENT_SPEC, grpCtx)).toBeGreaterThanOrEqual(0.55);
     expect(heuristicDomainScore(makeEvent({ text: 'AI芯片最新動態？' }), AI5_AGENT_SPEC, grpCtx)).toBeGreaterThanOrEqual(0.55);
+    expect(
+      heuristicDomainScore(
+        makeEvent({ text: '剛跟朋友逛完 Camden 市集超累，順便問一下大家今天 Anthropic 或 OpenAI 有發新模型嗎？' }),
+        AI5_AGENT_SPEC,
+        grpCtx,
+      ),
+    ).toBeGreaterThanOrEqual(0.55);
   });
 
   it('defers AI hackathons/scholarships/food-recalls to Manyfold Data and delegates Chinese numeral story follow-ups to A2A', async () => {
