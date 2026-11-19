@@ -532,6 +532,7 @@ describe('manyfold-ai-news Narra Gateway', () => {
   it('UC-12: strips sibling agent mentions cleanly so @問一籤 @AI in 5 今日 AI 新聞 triggers AI5', async () => {
     const query = '@問一籤 @AI in 5 今日 AI 新聞';
     expect(isLatestIssueQuery(query, 'group')).toBe(true);
+    expect(isLatestIssueQuery('@AI Tarot @AI Fortune Stick @AI in 5 latest AI news', 'group')).toBe(true);
 
     const event = makeEvent({ text: query });
     const decision = await routeEvent(
