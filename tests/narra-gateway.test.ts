@@ -587,4 +587,56 @@ describe('manyfold-ai-news Narra Gateway', () => {
     const mentionedDmReply = await fastRespondAi5(baseEnv, mentionedDmEvent, dmDecision, emptyMem);
     expect(mentionedDmReply).toBe(dmReply);
   });
+
+  it('guards unmentioned group active_session chatter and off-topic turns with [NO_REPLY] instead of falling back to A2A', async () => {
+    const emptyMem = { userMemories: [], roomMemories: [], promptSafeLines: [] };
+    const activeSessionDecision = {
+      shouldReply: true,
+      tier: 0 as const,
+      reason: 'active_session',
+      confidence: 0.95,
+      detectedLang: 'zh-Hant' as const,
+      shouldQuote: false,
+    };
+
+    const chatterReply = await fastRespondAi5(
+      baseEnv,
+      makeEvent({ chatType: 'group', text: '今天天氣真不錯，晚上想早點休息' }),
+      activeSessionDecision,
+      emptyMem,
+    );
+    expect(chatterReply).toBe('[NO_REPLY]');
+
+    const offTopicAntiReply = await fastRespondAi5(
+      baseEnv,
+      makeEvent({ chatType: 'group', text: '這週末 Soho 有什麼免費快閃活動？' }),
+      activeSessionDecision,
+      emptyMem,
+    );
+    expect(offTopicAntiReply).toBe('[NO_REPLY]');
+
+    const bareGreetingReply = await fastRespondAi5(
+      baseEnv,
+      makeEvent({ chatType: 'group', text: '你好' }),
+      activeSessionDecision,
+      emptyMem,
+    );
+    expect(bareGreetingReply).toBe('[NO_REPLY]');
+
+    const genuineActiveQuery = await fastRespondAi5(
+      baseEnv,
+      makeEvent({ chatType: 'group', text: '今天有什麼 AI 新聞？' }),
+      activeSessionDecision,
+      emptyMem,
+    );
+    expect(genuineActiveQuery).toContain('今日焦點');
+
+    const specificFollowUp = await fastRespondAi5(
+      baseEnv,
+      makeEvent({ chatType: 'group', text: 'What did OpenAI announce in story 2?' }),
+      { ...activeSessionDecision, detectedLang: 'en' },
+      emptyMem,
+    );
+    expect(specificFollowUp).toBeNull();
+  });
 });
