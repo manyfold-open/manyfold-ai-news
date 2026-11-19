@@ -88,6 +88,7 @@ export const AI5_AGENT_SPEC: AgentSpec = {
     'ai新聞',
     '人工智能',
     '大模型',
+    '新模型',
     'AI模型',
     'AI芯片',
     'AI晶片',
