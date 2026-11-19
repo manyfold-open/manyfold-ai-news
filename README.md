@@ -110,7 +110,7 @@ Variables live in `wrangler.jsonc`; secrets are set with `npx wrangler secret pu
 
 ## Deploying
 
-Production is the `manyfold-ai-news` Worker on the NetMind.AI Cloudflare account, routed at `app.manyfold.ai/ai-news`. Pushing to GitHub does **not** deploy. From a clean checkout of `main`:
+Production is the `manyfold-ai-news` Worker on the NetMind.AI Cloudflare account, routed at `app.manyfold.ai/ai-news`. Pushing to `main` (or running `workflow_dispatch`) automatically deploys via [`.github/workflows/ci.yml`](.github/workflows/ci.yml) once `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` are set in GitHub Actions repository secrets. Manual deploys from a clean checkout of `main` also work:
 
 ```bash
 npm ci

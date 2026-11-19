@@ -5,12 +5,12 @@ Cloudflare Worker starter; these are the load-bearing walls.
 
 ## How deployment works
 
-- **Deploys are manual, from `main`.** Production is the `manyfold-ai-news` Worker on the
-  NetMind.AI Cloudflare account (`account_id` is pinned in `wrangler.jsonc`), routed at
-  `app.manyfold.ai/ai-news`. Pushing to GitHub does not deploy: Workers Builds is not
-  linked. From a clean checkout of `main`: `npm ci && npm run check && npm test && npm run
-  build && npx wrangler deploy`. CI (`.github/workflows/ci.yml`) only checks; it never
-  deploys and holds no credentials.
+- **Auto-deploys from `main` via GitHub Actions (manual deploys also supported).** Production
+  is the `manyfold-ai-news` Worker on the NetMind.AI Cloudflare account (`account_id` is pinned
+  in `wrangler.jsonc`), routed at `app.manyfold.ai/ai-news`. Pushing to `main` (or triggering
+  `workflow_dispatch`) deploys automatically when `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`
+  repository secrets are set in GitHub Actions (otherwise `deploy` skips with a notice). From a
+  clean checkout of `main`: `npm ci && npm run check && npm test && npm run build && npx wrangler deploy`.
 - The build step is load-bearing: `wrangler deploy` deploys the output that
   `vite build` writes to `dist/` (via the Cloudflare Vite plugin's deploy-config redirect).
   Never deploy without building first, and never remove the `build` script.
