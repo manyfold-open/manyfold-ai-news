@@ -1,6 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
+  heuristicDomainScore,
   isNarraGatewayEnabled,
   kickNarraGateway,
   routeEvent,
@@ -638,5 +639,31 @@ describe('manyfold-ai-news Narra Gateway', () => {
       emptyMem,
     );
     expect(specificFollowUp).toBeNull();
+  });
+
+  it('requires AI-qualified terms so non-AI bare model/chip/issue/模型 do not false-trigger heuristicDomainScore', async () => {
+    const grpCtx = { roomId: '!grp:matrix.netmind.chat', chatType: 'group' as const, members: [], recentHistory: [] };
+
+    expect(heuristicDomainScore(makeEvent({ text: 'I bought a new model train kit today' }), AI5_AGENT_SPEC, grpCtx)).toBeLessThan(0.55);
+    expect(heuristicDomainScore(makeEvent({ text: 'Want some fish and chips tonight?' }), AI5_AGENT_SPEC, grpCtx)).toBeLessThan(0.55);
+    expect(heuristicDomainScore(makeEvent({ text: 'My car has a brake issue on the motorway' }), AI5_AGENT_SPEC, grpCtx)).toBeLessThan(0.55);
+    expect(heuristicDomainScore(makeEvent({ text: '我買了一盒鋼彈模型要組裝' }), AI5_AGENT_SPEC, grpCtx)).toBeLessThan(0.55);
+    expect(heuristicDomainScore(makeEvent({ text: '手機晶片好像有點發熱問題' }), AI5_AGENT_SPEC, grpCtx)).toBeLessThan(0.55);
+
+    const nonAiRoute = await routeEvent(
+      makeEvent({ text: '我朋友昨天去秋葉原買了超帥的鋼彈模型' }),
+      grpCtx,
+      AI5_AGENT_SPEC,
+      { nowMs: 1_763_550_000_000 },
+    );
+    expect(nonAiRoute.shouldReply).toBe(false);
+
+    // AI-qualified terms continue to trigger >= 0.55
+    expect(heuristicDomainScore(makeEvent({ text: 'Any new AI models launched this week?' }), AI5_AGENT_SPEC, grpCtx)).toBeGreaterThanOrEqual(0.55);
+    expect(heuristicDomainScore(makeEvent({ text: 'Any new AI chip updates?' }), AI5_AGENT_SPEC, grpCtx)).toBeGreaterThanOrEqual(0.55);
+    expect(heuristicDomainScore(makeEvent({ text: 'Any foundation model releases today?' }), AI5_AGENT_SPEC, grpCtx)).toBeGreaterThanOrEqual(0.55);
+    expect(heuristicDomainScore(makeEvent({ text: 'AI模型最近表現如何？' }), AI5_AGENT_SPEC, grpCtx)).toBeGreaterThanOrEqual(0.55);
+    expect(heuristicDomainScore(makeEvent({ text: 'AI晶片和大模型有什麼消息？' }), AI5_AGENT_SPEC, grpCtx)).toBeGreaterThanOrEqual(0.55);
+    expect(heuristicDomainScore(makeEvent({ text: 'AI芯片最新動態？' }), AI5_AGENT_SPEC, grpCtx)).toBeGreaterThanOrEqual(0.55);
   });
 });

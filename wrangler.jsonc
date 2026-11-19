@@ -74,6 +74,9 @@
       "new_sqlite_classes": ["NarraMatrixSync", "NarraRoomCoordinator"]
     }
   ],
+  "ai": {
+    "binding": "AI"
+  },
   "vars": {
     // Manyfold API base. Point at https://api-staging.manyfold.ai via .dev.vars for local dev.
     "MANYFOLD_API_BASE_URL": "https://api.manyfold.ai",
