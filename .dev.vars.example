@@ -47,3 +47,14 @@
 # Set this (>=32 chars) to keep the key out of the database:
 #   npx wrangler secret put CONFIG_ENCRYPTION_KEY
 # CONFIG_ENCRYPTION_KEY=
+
+# Narra Messenger Gateway (keep off locally unless testing live Matrix sync).
+# NARRA_GATEWAY_ENABLED=off
+# NARRA_SYNC=off
+# NARRA_AGENT_TOKEN=
+# NARRA_API_ENDPOINT=https://api.netmind.chat
+# NARRA_AGENT_ID=agt_agq66pewgf2ovmibamfujrwdqi
+# NARRA_MATRIX_ID=@agent-4c062afc:matrix.netmind.chat
+# Optional direct A2A override for Narra gateway fallback:
+# MANYFOLD_A2A_URL=
+# MANYFOLD_A2A_TOKEN=
