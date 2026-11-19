@@ -16,7 +16,7 @@ import { credentialFor } from '../connect';
 import type { Env } from '../types';
 
 export const AI5_AGENT_ID = 'agt_agq66pewgf2ovmibamfujrwdqi';
-export const AI5_MATRIX_ID = '@agent-4c062afc:matrix.netmind.chat';
+export const AI5_MATRIX_ID = '@agent-3add8bb6:matrix.netmind.chat';
 
 const DEFAULT_SITE_URL = 'https://app.manyfold.ai/ai-news';
 const DEFAULT_NARRA_ENDPOINT = 'https://api.netmind.chat';
