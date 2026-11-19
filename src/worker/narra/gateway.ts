@@ -50,7 +50,7 @@ export const AI5_AGENT_SPEC: AgentSpec = {
   name: 'AI in 5',
   aliases: ['AI in 5', 'AI5', 'ai5', 'ai5-chat', 'AI新闻', 'AI新聞'],
   domainDescription:
-    'Daily AI news briefing (AI in 5 / AI新闻): US, China, and global AI models, companies, launches, benchmarks, funding, policy, and issue corrections.',
+    'Daily AI news briefing (AI in 5 / AI新闻): US, China, and global AI models, companies, launches, benchmarks, funding, policy, and issue corrections — NOT AI hackathons, scholarships, visa rules, or food recalls (Manyfold Data handles those).',
   domainKeywords: [
     'ai news',
     'ai in 5',
@@ -147,6 +147,14 @@ export const AI5_AGENT_SPEC: AgentSpec = {
     'visa change',
     '簽證',
     '签证',
+    'hackathon',
+    'hackathons',
+    '黑客松',
+    '獎學金',
+    '奖学金',
+    'scholarship',
+    'food recall',
+    '食品召回',
   ],
   silenceThreshold: 0.55,
   sessionWindowMs: 180_000,
@@ -293,7 +301,7 @@ const BARE_GREETING_RE =
   /^(?:hi|hello|hey|yo|good\s*(?:morning|afternoon|evening)|早安|早上好|你好|您好|哈囉|哈啰|嗨|在嗎|在吗)[!！?？。\s]*$/i;
 
 const SPECIFIC_QUERY_RE =
-  /\b\d{4}-\d{2}-\d{2}\b|(?:story|第)\s*\d+|openai|anthropic|claude|gemini|deepmind|deepseek|qwen|kimi|zhipu|nvidia|meta|llama|apple|google|microsoft|tesla|xai|search|find|why|compare|correction|remember|forget|搜尋|搜索|查找|查一下|為什麼|为什么|怎麼看|怎么看|比較|比较|更正|記得|记得|忘掉|忘記|忘记/i;
+  /\b\d{4}-\d{2}-\d{2}\b|(?:story|第)\s*\d+|第\s*[一二三四五1-5][條条則则個个篇]?|展開|展开|詳細|详细|openai|anthropic|claude|gemini|deepmind|deepseek|qwen|kimi|zhipu|nvidia|meta|llama|apple|google|microsoft|tesla|xai|search|find|why|compare|correction|remember|forget|搜尋|搜索|查找|查一下|為什麼|为什么|怎麼看|怎么看|比較|比较|更正|記得|记得|忘掉|忘記|忘记/i;
 
 const LATEST_NEWS_QUERY_RE =
   /(?:today'?s|latest|recent|new)\s+(?:ai\s+)?(?:issue|news|briefing|stories|headlines?|top\s*3|summary)|what'?s\s+(?:new|big|happening)\s+in\s+ai|anything\s+big\s+in\s+ai|today\s+in\s+3|ai\s+in\s+5\s+today|今天(?:有(?:什麼|什么))?\s*(?:ai)?\s*(?:新聞|新闻|要聞|要闻|頭條|头条|快報|快报|大新聞|大新闻)|今日\s*(?:ai)?\s*(?:新聞|新闻|要聞|要闻|三條|三条|簡報|简报|日報|日报|焦點|焦点)|最新(?:一期|的?\s*ai\s*(?:新聞|新闻|簡報|简报|要聞|要闻|消息))|今天的三[條条]/i;
