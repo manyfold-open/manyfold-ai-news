@@ -666,4 +666,44 @@ describe('manyfold-ai-news Narra Gateway', () => {
     expect(heuristicDomainScore(makeEvent({ text: 'AI晶片和大模型有什麼消息？' }), AI5_AGENT_SPEC, grpCtx)).toBeGreaterThanOrEqual(0.55);
     expect(heuristicDomainScore(makeEvent({ text: 'AI芯片最新動態？' }), AI5_AGENT_SPEC, grpCtx)).toBeGreaterThanOrEqual(0.55);
   });
+
+  it('defers AI hackathons/scholarships/food-recalls to Manyfold Data and delegates Chinese numeral story follow-ups to A2A', async () => {
+    const emptyMem = { userMemories: [], roomMemories: [], promptSafeLines: [] };
+    const grpCtx = { roomId: '!grp:matrix.netmind.chat', chatType: 'group' as const, members: [], recentHistory: [] };
+
+    const hackathonQuery = '下個月倫敦有什麼 AI 黑客松可以報名嗎？';
+    expect(heuristicDomainScore(makeEvent({ text: hackathonQuery }), AI5_AGENT_SPEC, grpCtx)).toBeLessThan(AI5_AGENT_SPEC.silenceThreshold ?? 0.55);
+
+    const unmentionedDecision = {
+      shouldReply: true,
+      tier: 1 as const,
+      reason: 'model_triage',
+      confidence: 0.7,
+      detectedLang: 'zh-Hant' as const,
+      shouldQuote: false,
+    };
+    const hackathonReply = await fastRespondAi5(
+      baseEnv,
+      makeEvent({ chatType: 'group', text: hackathonQuery }),
+      unmentionedDecision,
+      emptyMem,
+    );
+    expect(hackathonReply).toBe('[NO_REPLY]');
+
+    const activeSessionDecision = {
+      shouldReply: true,
+      tier: 0 as const,
+      reason: 'active_session',
+      confidence: 0.95,
+      detectedLang: 'zh-Hant' as const,
+      shouldQuote: false,
+    };
+    const zhNumeralFollowup = await fastRespondAi5(
+      baseEnv,
+      makeEvent({ chatType: 'group', text: '詳細講講第一條？' }),
+      activeSessionDecision,
+      emptyMem,
+    );
+    expect(zhNumeralFollowup).toBeNull();
+  });
 });
