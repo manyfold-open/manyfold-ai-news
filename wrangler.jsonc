@@ -1,7 +1,8 @@
 // Cloudflare Worker configuration for AI in 5 (https://app.manyfold.ai/ai-news).
 //
-// Deploys are manual: `npm run build && npx wrangler deploy` from a checkout of main
-// (see README "Deploying"). Pushing to GitHub does not deploy.
+// Auto-deploys on pushes to `main` (and `workflow_dispatch`) via `.github/workflows/ci.yml`
+// when `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repository secrets are configured;
+// manual deploys from `main` remain supported: `npm run build && npx wrangler deploy`.
 //
 // Keep `main`, `assets` and the `DB` binding valid — the app reads all three.
 {
