@@ -1,6 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
+  createWorkersAiTriageModel,
   heuristicDomainScore,
   isNarraGatewayEnabled,
   kickNarraGateway,
@@ -712,5 +713,140 @@ describe('manyfold-ai-news Narra Gateway', () => {
       emptyMem,
     );
     expect(zhNumeralFollowup).toBeNull();
+  });
+
+  it('I2: responds immediately to bare @AI in 5 or explicit_mention greetings with issue + greeting or trilingual fallback', async () => {
+    const emptyMem = { userMemories: [], roomMemories: [], promptSafeLines: [] };
+    const grpCtx = {
+      roomId: '!grp_bare:matrix.netmind.chat',
+      chatType: 'group' as const,
+      userLanguageHint: 'zh-Hant' as const,
+      members: [
+        { matrixId: '@alice:matrix.netmind.chat', displayName: 'Alice', isAgent: false },
+        { matrixId: AI5_MATRIX_ID, displayName: 'AI in 5', isAgent: true },
+      ],
+      recentHistory: [],
+    };
+
+    const bareMentionEv = makeEvent({
+      roomId: grpCtx.roomId,
+      chatType: 'group',
+      text: '@AI in 5',
+      mentions: [AI5_MATRIX_ID],
+    });
+    const bareDecision = await routeEvent(bareMentionEv, grpCtx, AI5_AGENT_SPEC, {
+      nowMs: bareMentionEv.timestampMs,
+    });
+    expect(bareDecision.shouldReply).toBe(true);
+    expect(bareDecision.reason).toBe('explicit_mention');
+    expect(bareDecision.detectedLang).toBe('zh-Hant');
+
+    const bareReplyWithIssue = await fastRespondAi5(baseEnv, bareMentionEv, bareDecision, emptyMem);
+    expect(bareReplyWithIssue).not.toBeNull();
+    expect(bareReplyWithIssue).toContain('你好！這是今天 AI in 5 第 42 期的重點速覽（2026-11-19）：');
+    expect(bareReplyWithIssue).toContain('https://app.manyfold.ai/ai-news/zh/2026-11-19/1');
+
+    // Explicit mention with greeting also triggers greeting + issue
+    const explicitHiEv = makeEvent({
+      roomId: grpCtx.roomId,
+      chatType: 'group',
+      text: '@AI in 5 hello',
+      mentions: [AI5_MATRIX_ID],
+    });
+    const explicitHiDecision = await routeEvent(
+      explicitHiEv,
+      { ...grpCtx, userLanguageHint: undefined },
+      AI5_AGENT_SPEC,
+      { nowMs: explicitHiEv.timestampMs },
+    );
+    expect(explicitHiDecision.reason).toBe('explicit_mention');
+    expect(explicitHiDecision.detectedLang).toBe('en');
+    const explicitHiReply = await fastRespondAi5(baseEnv, explicitHiEv, explicitHiDecision, emptyMem);
+    expect(explicitHiReply).toContain("Hi! Here is today's AI in 5 issue 42 (2026-11-19):");
+
+    // When no published issue exists yet, returns friendly trilingual greeting fallback instead of null
+    const emptyIssueDb = sqliteD1();
+    await ensureSchema(emptyIssueDb);
+    const noIssueEnv: Env = { ...baseEnv, DB: emptyIssueDb };
+
+    const hantFallback = await fastRespondAi5(noIssueEnv, bareMentionEv, bareDecision, emptyMem);
+    expect(hantFallback).toContain('嗨！我是 AI in 5');
+    expect(hantFallback).toContain('新聞重點');
+
+    const hansFallback = await fastRespondAi5(
+      noIssueEnv,
+      bareMentionEv,
+      { ...bareDecision, detectedLang: 'zh-Hans' },
+      emptyMem,
+    );
+    expect(hansFallback).toContain('嗨！我是 AI in 5');
+    expect(hansFallback).toContain('新闻重点');
+
+    const enFallback = await fastRespondAi5(noIssueEnv, explicitHiEv, explicitHiDecision, emptyMem);
+    expect(enFallback).toContain("Hi! I'm AI in 5");
+    expect(enFallback).not.toMatch(/[\u4e00-\u9fff]/);
+  });
+
+  it('H1/H3 kit routing: answers post-pivot AI question after hotpot backdrop and suppresses ramen/noodle shop queries', async () => {
+    const grpCtx = {
+      roomId: '!grp_h1_h3:matrix.netmind.chat',
+      chatType: 'group' as const,
+      members: [
+        { matrixId: '@alice:matrix.netmind.chat', displayName: 'Alice', isAgent: false },
+        { matrixId: AI5_MATRIX_ID, displayName: 'AI in 5', isAgent: true },
+        { matrixId: '@agent-b2b526f3:matrix.netmind.chat', displayName: 'London Chinese Food', isAgent: true },
+      ],
+      recentHistory: [],
+    };
+    const aiMock = {
+      run: vi.fn(async () => ({ response: JSON.stringify({ score: 0.1, reason: 'peer_domain' }) })),
+    };
+    const triageModel = createWorkersAiTriageModel(aiMock);
+
+    // H1: Past-tense food backdrop + pivot + primary AI question -> deterministic domain_match (0 LLM calls)
+    const h1Text = '剛在唐人街吃完火鍋超撐，順便問一下今天 OpenAI 或 Anthropic 有發新模型嗎？';
+    const h1Decision = await routeEvent(
+      makeEvent({ text: h1Text, timestampMs: 1_763_550_000_000 }),
+      grpCtx,
+      AI5_AGENT_SPEC,
+      { nowMs: 1_763_550_000_000, triageModel },
+    );
+    expect(h1Decision.shouldReply).toBe(true);
+    expect(h1Decision.reason).toBe('domain_match');
+    expect(h1Decision.confidence).toBeGreaterThanOrEqual(0.92);
+    expect(aiMock.run).not.toHaveBeenCalled();
+
+    // H3 primary AI ask before pivot -> deterministic domain_match
+    const h3PrimaryAi = '今天 OpenAI 或 Anthropic 有發什麼新模型嗎？順便問一下倫敦中國城有好吃的拉麵館嗎？';
+    const h3PrimaryDecision = await routeEvent(
+      makeEvent({ text: h3PrimaryAi, timestampMs: 1_763_550_000_000 }),
+      grpCtx,
+      AI5_AGENT_SPEC,
+      { nowMs: 1_763_550_000_000, triageModel },
+    );
+    expect(h3PrimaryDecision.shouldReply).toBe(true);
+    expect(h3PrimaryDecision.reason).toBe('domain_match');
+    expect(aiMock.run).not.toHaveBeenCalled();
+
+    // Ramen/noodle shop queries (antiKeywords) score below threshold and yield
+    expect(AI5_AGENT_SPEC.antiKeywords).toEqual(
+      expect.arrayContaining(['拉麵', '拉面', '麵館', '面馆']),
+    );
+    for (const ramenText of [
+      '倫敦中國城哪家拉麵館比較好吃？',
+      '伦敦有什么正宗拉面馆推荐吗？',
+      '倫敦中國城有什麼好吃的拉麵館嗎？順便問一下今天 OpenAI 有發新模型嗎？',
+    ]) {
+      expect(heuristicDomainScore(makeEvent({ text: ramenText }), AI5_AGENT_SPEC, grpCtx), ramenText).toBeLessThan(
+        AI5_AGENT_SPEC.silenceThreshold ?? 0.55,
+      );
+      const dec = await routeEvent(
+        makeEvent({ text: ramenText, timestampMs: 1_763_550_000_000 }),
+        grpCtx,
+        AI5_AGENT_SPEC,
+        { nowMs: 1_763_550_000_000, triageModel },
+      );
+      expect(dec.shouldReply, ramenText).toBe(false);
+    }
   });
 });

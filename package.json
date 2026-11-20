@@ -17,7 +17,7 @@
     "node": ">=22"
   },
   "dependencies": {
-    "@manyfold/narra-agent-kit": "github:manyfold-open/narra-agent-kit#bc85f082e7a7bbd40e940e218e598b6375830832",
+    "@manyfold/narra-agent-kit": "github:manyfold-open/narra-agent-kit#1d0b64f8241693a8f3f7f25d53597b3ab61c0b2f",
     "hono": "^4.13.1",
     "jsonrepair": "^3.15.0",
     "react": "^19.2.0",
