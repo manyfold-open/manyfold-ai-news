@@ -7,6 +7,7 @@ import {
   kickNarraGateway,
   routeEvent,
   staggerWindowMinute,
+  toZhHant,
   type InboundEvent,
 } from '@manyfold/narra-agent-kit';
 import worker, { NarraMatrixSync, NarraRoomCoordinator } from '../src/worker/index';
@@ -1021,5 +1022,108 @@ describe('manyfold-ai-news Narra Gateway', () => {
     const noIssueReply = await fastRespondAi5({ ...baseEnv, DB: emptyDb }, h1Event, h1Decision, emptyMem);
     expect(noIssueReply).toBeNull();
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('handles 1v1 DM thanks, capability prompts, off-topic redirects, and toZhHant leak fixes cleanly', async () => {
+    const emptyMem = { userMemories: [], roomMemories: [], promptSafeLines: [] };
+    const dmCtx = { roomId: '!dm_1v1:matrix.netmind.chat', chatType: 'dm' as const, members: [], recentHistory: [] };
+
+    // 1. DM off-topic redirect (zh-Hant, zh-Hans, en)
+    const rainEv = makeEvent({ roomId: dmCtx.roomId, chatType: 'dm', text: '倫敦今天會下雨嗎？' });
+    const rainDecision = await routeEvent(rainEv, dmCtx, AI5_AGENT_SPEC, { nowMs: rainEv.timestampMs });
+    expect(rainDecision.shouldReply).toBe(true);
+    expect(rainDecision.detectedLang).toBe('zh-Hant');
+    const rainReply = await fastRespondAi5(baseEnv, rainEv, rainDecision, emptyMem);
+    expect(rainReply).toBe(
+      '我主要是幫你追蹤每日 AI 新聞重點、模型發布與產業動態，天氣或非 AI 話題比較不在我的範圍喔！要看看今天的 AI 重點新聞嗎？',
+    );
+
+    const btcEv = makeEvent({ roomId: dmCtx.roomId, chatType: 'dm', text: '今天比特币多少钱？' });
+    const btcDecision = await routeEvent(btcEv, dmCtx, AI5_AGENT_SPEC, { nowMs: btcEv.timestampMs });
+    expect(btcDecision.detectedLang).toBe('zh-Hans');
+    expect(await fastRespondAi5(baseEnv, btcEv, btcDecision, emptyMem)).toBe(
+      '我主要是帮你追踪每日 AI 新闻重点、模型发布与产业动态，天气或非 AI 话题比较不在我的范围哦！要看看今天的 AI 重点新闻吗？',
+    );
+
+    const forecastEv = makeEvent({ roomId: dmCtx.roomId, chatType: 'dm', text: "What's the weather forecast today?" });
+    const forecastDecision = await routeEvent(forecastEv, dmCtx, AI5_AGENT_SPEC, { nowMs: forecastEv.timestampMs });
+    expect(forecastDecision.detectedLang).toBe('en');
+    expect(await fastRespondAi5(baseEnv, forecastEv, forecastDecision, emptyMem)).toBe(
+      "I focus on daily AI news briefings, model launches, and industry updates, so that's a bit outside my lane! Want to see today's top AI stories?",
+    );
+
+    // 2. DM thanks reply (zh-Hant, zh-Hans, en) + unmentioned group active_session silence + AI-question guard
+    const thxEv = makeEvent({ roomId: dmCtx.roomId, chatType: 'dm', text: '謝謝' });
+    const thxDecision = await routeEvent(thxEv, dmCtx, AI5_AGENT_SPEC, { nowMs: thxEv.timestampMs });
+    expect(thxDecision.detectedLang).toBe('zh-Hant');
+    expect(await fastRespondAi5(baseEnv, thxEv, thxDecision, emptyMem)).toBe(
+      '不客氣！隨時想看今日 AI 新聞重點或查特定 AI 模型動態，直接問我就好 📰',
+    );
+
+    const thxHansEv = makeEvent({ roomId: dmCtx.roomId, chatType: 'dm', text: '谢谢！' });
+    const thxHansDecision = await routeEvent(thxHansEv, dmCtx, AI5_AGENT_SPEC, { nowMs: thxHansEv.timestampMs });
+    expect(thxHansDecision.detectedLang).toBe('zh-Hans');
+    expect(await fastRespondAi5(baseEnv, thxHansEv, thxHansDecision, emptyMem)).toBe(
+      '不客气！随时想看今日 AI 新闻重点或查特定 AI 模型动态，直接问我就好 📰',
+    );
+
+    const thxEnEv = makeEvent({ roomId: dmCtx.roomId, chatType: 'dm', text: 'thanks!' });
+    const thxEnDecision = await routeEvent(thxEnEv, dmCtx, AI5_AGENT_SPEC, { nowMs: thxEnEv.timestampMs });
+    expect(thxEnDecision.detectedLang).toBe('en');
+    expect(await fastRespondAi5(baseEnv, thxEnEv, thxEnDecision, emptyMem)).toBe(
+      "You're welcome! Ask anytime for today's top AI news or updates on any AI model 📰",
+    );
+
+    expect(
+      await fastRespondAi5(
+        baseEnv,
+        makeEvent({ chatType: 'group', text: '謝謝' }),
+        {
+          shouldReply: true,
+          tier: 0,
+          reason: 'active_session',
+          confidence: 0.95,
+          detectedLang: 'zh-Hant',
+          shouldQuote: false,
+        },
+        emptyMem,
+      ),
+    ).toBe('[NO_REPLY]');
+
+    // Thanks + AI question still answers the AI question rather than thanks reply
+    const thxWithNewsEv = makeEvent({ roomId: dmCtx.roomId, chatType: 'dm', text: '謝謝，今天有什麼 AI 新聞？' });
+    const thxWithNewsDecision = await routeEvent(thxWithNewsEv, dmCtx, AI5_AGENT_SPEC, {
+      nowMs: thxWithNewsEv.timestampMs,
+    });
+    expect(await fastRespondAi5(baseEnv, thxWithNewsEv, thxWithNewsDecision, emptyMem)).toContain('今日焦點');
+
+    // 3. Capability questions trigger greeting + Top 3
+    const capEv = makeEvent({ roomId: dmCtx.roomId, chatType: 'dm', text: '你能幫我查什麼？' });
+    const capDecision = await routeEvent(capEv, dmCtx, AI5_AGENT_SPEC, { nowMs: capEv.timestampMs });
+    const capReply = await fastRespondAi5(baseEnv, capEv, capDecision, emptyMem);
+    expect(capReply).toContain('你好！這是今天 AI in 5 第 42 期的重點速覽（2026-11-19）：');
+    expect(capReply).toContain('https://app.manyfold.ai/ai-news/zh/2026-11-19/1');
+
+    const capEnEv = makeEvent({ roomId: dmCtx.roomId, chatType: 'dm', text: 'what can you do?' });
+    const capEnDecision = await routeEvent(capEnEv, dmCtx, AI5_AGENT_SPEC, { nowMs: capEnEv.timestampMs });
+    const capEnReply = await fastRespondAi5(baseEnv, capEnEv, capEnDecision, emptyMem);
+    expect(capEnReply).toContain("Hi! Here is today's AI in 5 issue 42 (2026-11-19):");
+
+    // 4. Deep AI follow-ups in DM preserve null return for A2A
+    for (const deepText of ['why?', 'story 2', 'compare OpenAI and Anthropic']) {
+      const deepEv = makeEvent({ roomId: dmCtx.roomId, chatType: 'dm', text: deepText });
+      const deepDecision = await routeEvent(deepEv, dmCtx, AI5_AGENT_SPEC, { nowMs: deepEv.timestampMs });
+      expect(await fastRespondAi5(baseEnv, deepEv, deepDecision, emptyMem), deepText).toBeNull();
+    }
+
+    // 5. Upgraded narra-agent-kit toZhHant fixes 监控/诉讼/遭袭/基础/账单 -> 監控/訴訟/遭襲/基礎/帳單
+    expect(toZhHant('监控/诉讼/遭袭/基础/账单')).toBe('監控/訴訟/遭襲/基礎/帳單');
+    const leakIssue = makePublishedIssue('2026-11-20', 44);
+    leakIssue.stories[0].title.zh = '监管监控与诉讼遭袭事件升级';
+    leakIssue.stories[0].summary.zh = '基础设施账单成本受到关注。';
+    const formattedLeak = formatIssueTop3(leakIssue, 'zh-Hant', 'https://app.manyfold.ai/ai-news');
+    expect(formattedLeak).toContain('監管監控與訴訟遭襲事件升級');
+    expect(formattedLeak).toContain('基礎設施帳單成本受到關注');
+    expect(formattedLeak).not.toMatch(/监控|诉讼|遭袭|基础|账单/);
   });
 });
