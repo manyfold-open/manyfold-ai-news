@@ -124,6 +124,10 @@ export const AI5_AGENT_SPEC: AgentSpec = {
     '中餐',
     '餐廳',
     '餐厅',
+    '拉麵',
+    '拉面',
+    '麵館',
+    '面馆',
     'tarot',
     '塔羅',
     '塔罗',
@@ -477,6 +481,27 @@ export async function fastRespondAi5(
     ) {
       return '[NO_REPLY]';
     }
+  }
+
+  const bareText = cleanText.replace(/^[!！?？.,，。:：;；\s]+|[!！?？.,，。:：;；\s]+$/g, '');
+  if (
+    (effectiveChatType === 'dm' || decision.reason === 'explicit_mention') &&
+    (!bareText || isBareGreeting(cleanText))
+  ) {
+    const latest = await fetchLatestPublishedIssue(env);
+    if (latest) {
+      return formatIssueTop3(latest.issue, decision.detectedLang, siteBase(env), {
+        voice: Boolean(event.isVoice),
+        greeting: true,
+      });
+    }
+    if (decision.detectedLang === 'zh-Hant') {
+      return '嗨！我是 AI in 5 📰 想看今天最新的 AI 新聞重點，或查任何 AI 模型與產業動態都可以直接問我！';
+    }
+    if (decision.detectedLang === 'zh-Hans') {
+      return '嗨！我是 AI in 5 📰 想看今天最新的 AI 新闻重点，或查任何 AI 模型与产业动态都可以直接问我！';
+    }
+    return "Hi! I'm AI in 5 📰 Ask me for today's top AI news highlights, or ask about any AI model or industry updates!";
   }
 
   if (!isLatestIssueQuery(event.text, effectiveChatType)) {
