@@ -213,7 +213,12 @@ describe('manyfold-ai-news Narra Gateway', () => {
     expect(updates[0].roomId).toBe(groupRoom);
     expect(updates[0].updateKey).toBe('issue:2026-11-19');
     expect(updates[0].text).toContain('AI in 5 No. 42 (2026-11-19)');
+    expect(updates[0].text).toContain('• Qilin Lab open-sources a 70B model at 1/8 the running cost —');
+    expect(updates[0].text).toContain('• Northwind’s assistant now remembers past chats, on by default —');
+    expect(updates[0].text).toContain('• Paris lab Aster raises €600M to build models in 24 languages —');
     expect(updates[0].text).toContain('https://app.manyfold.ai/ai-news/en/2026-11-19/1');
+    expect(updates[0].text).not.toContain('\n1. ');
+    expect(updates[0].text).not.toMatch(/\n\d+\.\s/);
     expect(updates[0].text).not.toMatch(/\]\(https?:\/\//);
 
     // Deduplicated across staggered kickNarraGateway runs
@@ -273,7 +278,12 @@ describe('manyfold-ai-news Narra Gateway', () => {
       emptyMem,
     );
     expect(enReply).toContain('AI in 5 No. 42 (2026-11-19)');
+    expect(enReply).toContain('• Qilin Lab open-sources a 70B model at 1/8 the running cost —');
+    expect(enReply).toContain('• Northwind’s assistant now remembers past chats, on by default —');
+    expect(enReply).toContain('• Paris lab Aster raises €600M to build models in 24 languages —');
     expect(enReply).toContain('https://app.manyfold.ai/ai-news/en/2026-11-19/1');
+    expect(enReply).not.toContain('\n1. ');
+    expect(enReply).not.toMatch(/\n\d+\.\s/);
     expect(enReply).not.toMatch(/\]\(https?:\/\//);
 
     const hantReply = await fastRespondAi5(
@@ -292,6 +302,9 @@ describe('manyfold-ai-news Narra Gateway', () => {
     expect(hantReply).toContain('今日焦點');
     expect(hantReply).toContain('完整期號');
     expect(hantReply).toContain('https://app.manyfold.ai/ai-news/zh/2026-11-19/1');
+    expect(hantReply).toContain('\n• ');
+    expect(hantReply).not.toContain('\n1. ');
+    expect(hantReply).not.toMatch(/\n\d+\.\s/);
 
     const hansReply = await fastRespondAi5(
       baseEnv,
@@ -308,6 +321,9 @@ describe('manyfold-ai-news Narra Gateway', () => {
     );
     expect(hansReply).toContain('今日焦点');
     expect(hansReply).toContain('完整期号');
+    expect(hansReply).toContain('\n• ');
+    expect(hansReply).not.toContain('\n1. ');
+    expect(hansReply).not.toMatch(/\n\d+\.\s/);
 
     const voiceReply = await fastRespondAi5(
       baseEnv,
@@ -508,6 +524,9 @@ describe('manyfold-ai-news Narra Gateway', () => {
     expect(todayOnly).toContain('網絡安全');
     expect(todayOnly).toContain('億美元');
     expect(todayOnly).toContain('輪融資');
+    expect(todayOnly).toContain('\n• ');
+    expect(todayOnly).not.toContain('\n1. ');
+    expect(todayOnly).not.toMatch(/\n\d+\.\s/);
     expect(todayOnly).not.toMatch(/网络安全|亿美元|轮融资/);
 
     const briefsOnly = formatIssueTop3(
@@ -518,6 +537,9 @@ describe('manyfold-ai-news Narra Gateway', () => {
     expect(briefsOnly).toContain('網絡安全');
     expect(briefsOnly).toContain('億美元');
     expect(briefsOnly).toContain('輪融資');
+    expect(briefsOnly).toContain('\n• ');
+    expect(briefsOnly).not.toContain('\n1. ');
+    expect(briefsOnly).not.toMatch(/\n\d+\.\s/);
     expect(briefsOnly).not.toMatch(/网络安全|亿美元|轮融资/);
 
     const voiceOut = formatIssueTop3(
@@ -877,8 +899,10 @@ describe('manyfold-ai-news Narra Gateway', () => {
     expect(h1Reply).not.toBeNull();
     expect(h1Reply).toContain('第 42 期（2026-11-19）沒有提到 OpenAI、Anthropic 的相關更新');
     expect(h1Reply).toContain('今天重點新聞頭條');
-    expect(h1Reply).toContain('麒麟實驗室開源 70B 模型');
+    expect(h1Reply).toContain('• 麒麟實驗室開源 70B 模型');
     expect(h1Reply).toContain('https://app.manyfold.ai/ai-news/zh/2026-11-19');
+    expect(h1Reply).not.toContain('\n1. ');
+    expect(h1Reply).not.toMatch(/\n\d+\.\s/);
     expect(h1Reply).not.toMatch(/\]\(https?:\/\//);
     expect(h1Reply).not.toMatch(/实验室|开源|默认|记忆/);
     expect(fetchSpy).not.toHaveBeenCalled();
@@ -919,14 +943,16 @@ describe('manyfold-ai-news Narra Gateway', () => {
     const matchedHant = await fastRespondAi5(topicEnv, h1Event, h1Decision, emptyMem);
     expect(matchedHant).not.toBeNull();
     expect(matchedHant).toContain('第 43 期（2026-11-20）關於 OpenAI、Anthropic 的今日動態');
-    expect(matchedHant).toContain('Anthropic 發布 Claude 4.5 編碼模型');
-    expect(matchedHant).toContain('OpenAI 將 GPT 批量接口價格下調 25%');
+    expect(matchedHant).toContain('• Anthropic 發布 Claude 4.5 編碼模型 —');
+    expect(matchedHant).toContain('• OpenAI 將 GPT 批量接口價格下調 25%');
     expect(matchedHant).toContain('https://app.manyfold.ai/ai-news/zh/2026-11-20/1');
     expect(matchedHant).toContain('https://app.manyfold.ai/ai-news/zh/2026-11-20');
+    expect(matchedHant).not.toContain('\n1. ');
+    expect(matchedHant).not.toMatch(/\n\d+\.\s/);
     expect(matchedHant).not.toMatch(/\]\(https?:\/\//);
     expect(matchedHant).not.toMatch(/发布|编码|将|价格/);
 
-    // English & voice variants
+    // English & voice variants (and multi-story topic reply bullet formatting)
     const enMatchReply = formatTodayTopicReply(
       matchedIssue,
       'Did OpenAI or Anthropic launch anything today?',
@@ -935,9 +961,32 @@ describe('manyfold-ai-news Narra Gateway', () => {
       false,
     );
     expect(enMatchReply).toContain('AI in 5 No. 43 (2026-11-20) — updates on OpenAI and Anthropic:');
-    expect(enMatchReply).toContain('Anthropic launches Claude 4.5 for coding agents');
+    expect(enMatchReply).toContain('• Anthropic launches Claude 4.5 for coding agents —');
+    expect(enMatchReply).toContain('• OpenAI lowered GPT API batch pricing by 25%.');
     expect(enMatchReply).toContain('https://app.manyfold.ai/ai-news/en/2026-11-20/1');
     expect(enMatchReply).toContain('Full issue: https://app.manyfold.ai/ai-news/en/2026-11-20');
+    expect(enMatchReply).not.toContain('\n1. ');
+    expect(enMatchReply).not.toMatch(/\n\d+\.\s/);
+
+    const multiStoryTopicIssue = structuredClone(matchedIssue);
+    multiStoryTopicIssue.stories[1].org = { name: 'OpenAI', logo: matchedIssue.stories[1].org!.logo };
+    multiStoryTopicIssue.stories[1].title = {
+      en: 'OpenAI expands memory controls',
+      zh: 'OpenAI 扩展记忆控制功能',
+    };
+    const multiStoryTopicReply = formatTodayTopicReply(
+      multiStoryTopicIssue,
+      'Did OpenAI or Anthropic launch anything today?',
+      'en',
+      'https://app.manyfold.ai/ai-news',
+      false,
+    );
+    expect(multiStoryTopicReply).toContain('• Anthropic launches Claude 4.5 for coding agents —');
+    expect(multiStoryTopicReply).toContain('https://app.manyfold.ai/ai-news/en/2026-11-20/1');
+    expect(multiStoryTopicReply).toContain('• OpenAI expands memory controls —');
+    expect(multiStoryTopicReply).toContain('https://app.manyfold.ai/ai-news/en/2026-11-20/2');
+    expect(multiStoryTopicReply).not.toContain('\n1. ');
+    expect(multiStoryTopicReply).not.toMatch(/\n\d+\.\s/);
 
     const voiceNoMatch = formatTodayTopicReply(
       matchedIssue,
