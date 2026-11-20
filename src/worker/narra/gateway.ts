@@ -230,6 +230,38 @@ function localizeIssueText(raw: string, lang: LangCode): string {
   return lang === 'zh-Hant' ? toZhHant(text) : text;
 }
 
+const SUMMARY_BOUNDARY_CHAR_RE = /[\s,.;:!?，。；：！？、]/;
+
+/**
+ * Truncates a story summary to at most `maxLen` characters, snapping cleanly to
+ * the last whitespace or punctuation boundary within a reasonable window so
+ * English words are never cut mid-word, and appending `…`.
+ */
+export function truncateSummary(raw: string, maxLen = 150): string {
+  if (raw.length <= maxLen) return raw;
+  const budget = Math.max(1, maxLen - 1);
+  const slice = raw.slice(0, budget);
+  const nextChar = raw[budget] ?? '';
+
+  let cut = slice;
+  if (!SUMMARY_BOUNDARY_CHAR_RE.test(nextChar) && !SUMMARY_BOUNDARY_CHAR_RE.test(slice.slice(-1))) {
+    const minBoundary = Math.floor(budget * 0.6);
+    let lastBoundary = -1;
+    for (let i = slice.length - 1; i >= minBoundary; i--) {
+      if (SUMMARY_BOUNDARY_CHAR_RE.test(slice[i]!)) {
+        lastBoundary = i;
+        break;
+      }
+    }
+    if (lastBoundary >= minBoundary) {
+      cut = slice.slice(0, lastBoundary);
+    }
+  }
+
+  const cleaned = cut.replace(/[\s,.;:!?，。；：！？、\-–—(（]+$/, '');
+  return `${cleaned || slice.trimEnd()}…`;
+}
+
 function issueHeadlines(issue: Issue, lang: LangCode, limit = 3): string[] {
   const fieldLang = lang === 'en' ? 'en' : 'zh';
   if (issue.stories.length > 0) {
@@ -284,7 +316,7 @@ export function formatIssueTop3(
     stories.forEach((story, idx) => {
       const pos = storyPosition(issue, story.id) || idx + 1;
       const title = localize(story.title[fieldLang]);
-      const summary = localize(story.summary[fieldLang]).slice(0, 140);
+      const summary = truncateSummary(localize(story.summary[fieldLang]));
       const url = issueLink(siteUrl, lang, issue.date, pos);
       lines.push(`• ${title} — ${summary}`);
       lines.push(url);
@@ -482,7 +514,7 @@ export function formatTodayTopicReply(
       matched.push({
         kind: 'story',
         title: localize(story.title[fieldLang]),
-        summary: localize(story.summary[fieldLang]).slice(0, 140),
+        summary: truncateSummary(localize(story.summary[fieldLang])),
         url: issueLink(siteUrl, lang, issue.date, pos),
       });
     }
@@ -625,6 +657,9 @@ function offTopicRedirectAi5(lang: LangCode): string {
   return "I focus on daily AI news briefings, model launches, and industry updates, so that's a bit outside my lane! Want to see today's top AI stories?";
 }
 
+const EXPLICIT_EXPAND_STORY_RE =
+  /(?:展開|展开)第\s*([1-5])|第\s*([1-5])\s*[條条則则篇]?(?:詳細|详细|細節|细节)|\b(?:expand|more\s+(?:on|about)|details?\s+(?:on|for))\s+(?:item|story|article|number|#)?\s*([1-5])\b/i;
+
 const SPECIFIC_QUERY_RE =
   /\b\d{4}-\d{2}-\d{2}\b|(?:story|第)\s*\d+|第\s*[一二三四五1-5][條条則则個个篇]?|展開|展开|詳細|详细|openai|anthropic|claude|gemini|deepmind|deepseek|qwen|kimi|zhipu|nvidia|meta|llama|apple|google|microsoft|tesla|xai|search|find|why|compare|correction|remember|forget|搜尋|搜索|查找|查一下|為什麼|为什么|怎麼看|怎么看|比較|比较|更正|記得|记得|忘掉|忘記|忘记/i;
 
@@ -662,7 +697,7 @@ export function isLatestIssueQuery(text: string, chatType: 'dm' | 'group'): bool
   const clean = stripAgentMentions(text ?? '', ALL_KNOWN_MENTION_NAMES);
   if (!clean) return chatType === 'dm';
   if (chatType === 'dm' && isBareGreeting(clean)) return true;
-  if (SPECIFIC_QUERY_RE.test(clean)) return false;
+  if (SPECIFIC_QUERY_RE.test(clean) || EXPLICIT_EXPAND_STORY_RE.test(clean)) return false;
   return LATEST_NEWS_QUERY_RE.test(clean);
 }
 
@@ -779,6 +814,7 @@ function isThanksMessage(cleanText: string): boolean {
     hasSpecKeywordHit(cleanText, AI5_AGENT_SPEC.antiKeywords) ||
     DM_OFF_TOPIC_RE.test(cleanText) ||
     SPECIFIC_QUERY_RE.test(cleanText) ||
+    EXPLICIT_EXPAND_STORY_RE.test(cleanText) ||
     LATEST_NEWS_QUERY_RE.test(cleanText) ||
     CAPABILITY_RE.test(cleanText) ||
     shouldHandleTodayTopicLookup(cleanText) ||
@@ -790,9 +826,6 @@ function isThanksMessage(cleanText: string): boolean {
   }
   return true;
 }
-
-const EXPLICIT_EXPAND_STORY_RE =
-  /(?:展開|展开)第\s*([1-5])|第\s*([1-5])\s*[條条則则篇]?(?:詳細|详细|細節|细节)/;
 
 const MAX_AI5_PREFETCH_CHARS = 1600;
 
@@ -888,19 +921,14 @@ export async function buildAi5ExtraEnvelopeFields(
     const story = issue.stories[idx]!;
     const pos = storyPosition(issue, story.id) || idx + 1;
     const title = localize(story.title[fieldLang]);
-    const summaryRaw = localize(story.summary[fieldLang]);
-    const summary =
-      summaryRaw.length > storySummaryBudget
-        ? `${summaryRaw.slice(0, storySummaryBudget - 1)}…`
-        : summaryRaw;
+    const summary = truncateSummary(localize(story.summary[fieldLang]), storySummaryBudget);
     const sourceUrl = story.sources[0]?.url ?? issueLink(base, lang, issue.date, pos);
     const storyLine = `[${pos}] ${title} — ${summary} | ${sourceUrl}`;
     if (!appendBounded(storyLine)) break;
   }
 
   for (const brief of issue.briefs) {
-    const textRaw = localize(brief.text[fieldLang]);
-    const text = textRaw.length > 140 ? `${textRaw.slice(0, 139)}…` : textRaw;
+    const text = truncateSummary(localize(brief.text[fieldLang]), 140);
     const src = localize(brief.src[fieldLang]);
     const briefLine = src ? `• Brief (${src}): ${text}` : `• Brief: ${text}`;
     if (!appendBounded(briefLine)) break;
@@ -937,7 +965,8 @@ export async function fastRespondAi5(
       decision.reason === 'active_session' &&
       !isLatestIssueQuery(event.text, 'group') &&
       !hasDomainHit &&
-      !SPECIFIC_QUERY_RE.test(cleanText)
+      !SPECIFIC_QUERY_RE.test(cleanText) &&
+      !EXPLICIT_EXPAND_STORY_RE.test(cleanText)
     ) {
       return '[NO_REPLY]';
     }
@@ -976,7 +1005,7 @@ export async function fastRespondAi5(
 
   const expandMatch = EXPLICIT_EXPAND_STORY_RE.exec(cleanText);
   if (expandMatch) {
-    const slotNumber = Number(expandMatch[1] ?? expandMatch[2]);
+    const slotNumber = Number(expandMatch[1] ?? expandMatch[2] ?? expandMatch[3]);
     const latest = await fetchLatestPublishedIssue(env);
     if (latest && Number.isInteger(slotNumber)) {
       const expanded = formatExpandedStory(
