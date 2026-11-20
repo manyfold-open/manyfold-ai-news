@@ -1446,4 +1446,103 @@ describe('manyfold-ai-news Narra Gateway', () => {
     expect(mfdDecision.shouldReply).toBe(false);
     expect(mfdDecision.reason).toBe('below_threshold');
   });
+
+  it('fast-responds to "今天 AI 圈发生了什么大事？" (top 3 in zh-Hans) and "Meta Llama 或 Google AI 这周有什么新消息？" (topic lookup in zh-Hans)', async () => {
+    const emptyMem = { userMemories: [], roomMemories: [], promptSafeLines: [] };
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const grpCtx = {
+      roomId: '!grp_qa_bugs_2_3:matrix.netmind.chat',
+      chatType: 'group' as const,
+      members: [
+        { matrixId: '@alice:matrix.netmind.chat', displayName: 'Alice', isAgent: false },
+        { matrixId: AI5_MATRIX_ID, displayName: 'AI in 5', isAgent: true },
+        { matrixId: '@agent-37b08ab6:matrix.netmind.chat', displayName: 'Manyfold Data', isAgent: true },
+      ],
+      recentHistory: [],
+    };
+    const nowMs = 1_763_550_000_000;
+    const aiMock = {
+      run: vi.fn(async () => ({ response: JSON.stringify({ score: 0.1, reason: 'should_not_be_called' }) })),
+    };
+    const triageModel = createWorkersAiTriageModel(aiMock);
+
+    // Bug #2: "今天 AI 圈发生了什么大事？" -> deterministic keywordHits >= 2 + isLatestIssueQuery -> Top 3 in zh-Hans
+    const aiCircleQuery = '今天 AI 圈发生了什么大事？';
+    expect(isLatestIssueQuery(aiCircleQuery, 'group')).toBe(true);
+    const aiCircleEv = makeEvent({ roomId: grpCtx.roomId, text: aiCircleQuery, timestampMs: nowMs });
+    const aiCircleDecision = await routeEvent(aiCircleEv, grpCtx, AI5_AGENT_SPEC, { nowMs, triageModel });
+    expect(aiCircleDecision.shouldReply).toBe(true);
+    expect(aiCircleDecision.reason).toBe('domain_match');
+    expect(aiCircleDecision.detectedLang).toBe('zh-Hans');
+    expect(aiCircleDecision.confidence).toBeGreaterThanOrEqual(0.9);
+    expect(aiMock.run).not.toHaveBeenCalled();
+
+    const aiCircleReply = await fastRespondAi5(baseEnv, aiCircleEv, aiCircleDecision, emptyMem);
+    expect(aiCircleReply).not.toBeNull();
+    expect(aiCircleReply).toContain('AI in 5 第 42 期（2026-11-19）今日焦点：');
+    expect(aiCircleReply).toContain('完整期号： https://app.manyfold.ai/ai-news/zh/2026-11-19');
+    expect(aiCircleReply).toContain('https://app.manyfold.ai/ai-news/zh/2026-11-19/1');
+    expect(aiCircleReply).toContain('\n• ');
+    expect(aiCircleReply).not.toMatch(/\]\(https?:\/\//);
+    expect(fetchSpy).not.toHaveBeenCalled();
+
+    // Bug #3: "Meta Llama 或 Google AI 这周有什么新消息？" -> deterministic domain_match + shouldHandleTodayTopicLookup in zh-Hans
+    const thisWeekQuery = 'Meta Llama 或 Google AI 这周有什么新消息？';
+    const thisWeekEv = makeEvent({ roomId: grpCtx.roomId, text: thisWeekQuery, timestampMs: nowMs });
+    const thisWeekDecision = await routeEvent(thisWeekEv, grpCtx, AI5_AGENT_SPEC, { nowMs, triageModel });
+    expect(thisWeekDecision.shouldReply).toBe(true);
+    expect(thisWeekDecision.reason).toBe('domain_match');
+    expect(thisWeekDecision.detectedLang).toBe('zh-Hans');
+    expect(aiMock.run).not.toHaveBeenCalled();
+
+    // When latest issue has no Meta/Llama/Google mention -> clean zh-Hans absence + top headlines, 0 A2A calls
+    const noMatchReply = await fastRespondAi5(baseEnv, thisWeekEv, thisWeekDecision, emptyMem);
+    expect(noMatchReply).not.toBeNull();
+    expect(noMatchReply).toContain('AI in 5 今天第 42 期（2026-11-19）没有提到 Meta、Llama、Google 的相关更新。');
+    expect(noMatchReply).toContain('今天重点新闻头条：');
+    expect(noMatchReply).toContain('完整期号： https://app.manyfold.ai/ai-news/zh/2026-11-19');
+    expect(fetchSpy).not.toHaveBeenCalled();
+
+    // When latest issue contains Google & Llama updates -> clean zh-Hans topic lookup with matching items
+    const topicDb = sqliteD1();
+    await topicDb.exec(
+      `CREATE TABLE IF NOT EXISTS issues (
+        date TEXT PRIMARY KEY,
+        number INTEGER NOT NULL,
+        status TEXT NOT NULL DEFAULT 'draft',
+        data TEXT NOT NULL,
+        published_at TEXT,
+        updated_at TEXT NOT NULL
+      );`,
+    );
+    const topicEnv: Env = { ...baseEnv, DB: topicDb };
+    const matchedIssue = makePublishedIssue('2026-11-20', 44);
+    matchedIssue.stories[0]!.org = { name: 'Google', logo: matchedIssue.stories[0]!.org!.logo };
+    matchedIssue.stories[0]!.title = {
+      en: 'Google AI unveils Gemini 3 developer tools',
+      zh: 'Google AI 发布 Gemini 3 开发者工具',
+    };
+    matchedIssue.stories[0]!.summary = {
+      en: 'Google rolled out new Gemini agent APIs with lower latency.',
+      zh: 'Google 推出新一代 Gemini 智能体接口，显著降低推理延迟。',
+    };
+    matchedIssue.briefs[0]!.org = { name: 'Meta', logo: matchedIssue.briefs[0]!.org!.logo };
+    matchedIssue.briefs[0]!.text = {
+      en: 'Meta published Llama 4 quantization benchmarks for edge devices.',
+      zh: 'Meta 公布 Llama 4 在端侧设备上的量化基准测试结果。',
+    };
+    await saveIssue(topicEnv, '2026-11-20', matchedIssue, 'published');
+
+    const matchedReply = await fastRespondAi5(topicEnv, thisWeekEv, thisWeekDecision, emptyMem);
+    expect(matchedReply).not.toBeNull();
+    expect(matchedReply).toContain('AI in 5 第 44 期（2026-11-20）关于 Meta、Llama、Google 的今日动态：');
+    expect(matchedReply).toContain('• Google AI 发布 Gemini 3 开发者工具 —');
+    expect(matchedReply).toContain('• Meta 公布 Llama 4 在端侧设备上的量化基准测试结果。');
+    expect(matchedReply).toContain('https://app.manyfold.ai/ai-news/zh/2026-11-20/1');
+    expect(matchedReply).toContain('完整期号： https://app.manyfold.ai/ai-news/zh/2026-11-20');
+    expect(matchedReply).not.toMatch(/\]\(https?:\/\//);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
 });
