@@ -13,7 +13,7 @@ import type {
   NarraA2ACredentialResult,
   NarraGatewayConfig,
 } from '@manyfold/narra-agent-kit/worker';
-import { plainText, storyPosition, type Issue } from '../../shared/issue';
+import { plainText, storyAt, storyPosition, type Issue } from '../../shared/issue';
 import { credentialFor } from '../connect';
 import type { Env } from '../types';
 
@@ -791,6 +791,126 @@ function isThanksMessage(cleanText: string): boolean {
   return true;
 }
 
+const EXPLICIT_EXPAND_STORY_RE =
+  /(?:展開|展开)第\s*([1-5])|第\s*([1-5])\s*[條条則则篇]?(?:詳細|详细|細節|细节)/;
+
+const MAX_AI5_PREFETCH_CHARS = 1600;
+
+export function formatExpandedStory(
+  issue: Issue,
+  slotNumber: number,
+  lang: LangCode,
+  siteUrl: string,
+  voice = false,
+): string | null {
+  const slot = storyAt(issue, slotNumber);
+  if (!slot || !('story' in slot)) return null;
+
+  const { story } = slot;
+  const fieldLang = lang === 'en' ? 'en' : 'zh';
+  const localize = (raw: string): string => localizeIssueText(raw, lang);
+  const title = localize(story.title[fieldLang]);
+  const summary = localize(story.summary[fieldLang]);
+  const why = localize(story.why[fieldLang]);
+  const next = story.next ? localize(story.next[fieldLang]) : '';
+  const url = issueLink(siteUrl, lang, issue.date, slotNumber);
+
+  if (voice) {
+    if (lang === 'zh-Hant') {
+      return `AI in 5 第 ${issue.number} 期第 ${slotNumber} 條：${title}。${summary}${why ? ` ${why}` : ''}`;
+    }
+    if (lang === 'zh-Hans') {
+      return `AI in 5 第 ${issue.number} 期第 ${slotNumber} 条：${title}。${summary}${why ? ` ${why}` : ''}`;
+    }
+    return `AI in 5 issue ${issue.number}, story ${slotNumber}: ${title}. ${summary}${why ? ` ${why}` : ''}`;
+  }
+
+  const lines: string[] = [];
+  if (lang === 'zh-Hant') {
+    lines.push(`AI in 5 第 ${issue.number} 期（${issue.date}）第 ${slotNumber} 條：${title}`);
+    lines.push(summary);
+    if (why) lines.push(`為什麼重要：${why}`);
+    if (next) lines.push(`後續關注：${next}`);
+    lines.push(`原文連結： ${url}`);
+  } else if (lang === 'zh-Hans') {
+    lines.push(`AI in 5 第 ${issue.number} 期（${issue.date}）第 ${slotNumber} 条：${title}`);
+    lines.push(summary);
+    if (why) lines.push(`为什么重要：${why}`);
+    if (next) lines.push(`后续关注：${next}`);
+    lines.push(`原文链接： ${url}`);
+  } else {
+    lines.push(`AI in 5 No. ${issue.number} (${issue.date}) — Story ${slotNumber}: ${title}`);
+    lines.push(summary);
+    if (why) lines.push(`Why it matters: ${why}`);
+    if (next) lines.push(`What's next: ${next}`);
+    lines.push(`Full story: ${url}`);
+  }
+
+  return sanitizeMobileLinks(lines.join('\n'));
+}
+
+export async function buildAi5ExtraEnvelopeFields(
+  env: Env,
+  _event: InboundEvent,
+  decision: TriageDecision,
+): Promise<Record<string, string> | null> {
+  const latest = await fetchLatestPublishedIssue(env);
+  if (!latest) return null;
+
+  const { issue } = latest;
+  const lang = decision.detectedLang;
+  const fieldLang = lang === 'en' ? 'en' : 'zh';
+  const localize = (raw: string): string => localizeIssueText(raw, lang);
+  const base = siteBase(env);
+
+  const lines: string[] = [
+    `AI in 5 No. ${issue.number} (${issue.date}) ${issueLink(base, lang, issue.date)}`,
+  ];
+  let totalLen = lines[0]!.length;
+
+  const appendBounded = (line: string): boolean => {
+    const candidateLen = totalLen + 1 + line.length;
+    if (candidateLen <= MAX_AI5_PREFETCH_CHARS) {
+      lines.push(line);
+      totalLen = candidateLen;
+      return true;
+    }
+    const remaining = MAX_AI5_PREFETCH_CHARS - totalLen - 2;
+    if (remaining >= 24) {
+      lines.push(`${line.slice(0, remaining)}…`);
+      totalLen = MAX_AI5_PREFETCH_CHARS;
+    }
+    return false;
+  };
+
+  const storySummaryBudget = issue.stories.length > 4 ? 110 : 180;
+  for (let idx = 0; idx < issue.stories.length; idx++) {
+    const story = issue.stories[idx]!;
+    const pos = storyPosition(issue, story.id) || idx + 1;
+    const title = localize(story.title[fieldLang]);
+    const summaryRaw = localize(story.summary[fieldLang]);
+    const summary =
+      summaryRaw.length > storySummaryBudget
+        ? `${summaryRaw.slice(0, storySummaryBudget - 1)}…`
+        : summaryRaw;
+    const sourceUrl = story.sources[0]?.url ?? issueLink(base, lang, issue.date, pos);
+    const storyLine = `[${pos}] ${title} — ${summary} | ${sourceUrl}`;
+    if (!appendBounded(storyLine)) break;
+  }
+
+  for (const brief of issue.briefs) {
+    const textRaw = localize(brief.text[fieldLang]);
+    const text = textRaw.length > 140 ? `${textRaw.slice(0, 139)}…` : textRaw;
+    const src = localize(brief.src[fieldLang]);
+    const briefLine = src ? `• Brief (${src}): ${text}` : `• Brief: ${text}`;
+    if (!appendBounded(briefLine)) break;
+  }
+
+  return {
+    d1_prefetched_records: lines.join('\n').slice(0, MAX_AI5_PREFETCH_CHARS),
+  };
+}
+
 export async function fastRespondAi5(
   env: Env,
   event: InboundEvent,
@@ -852,6 +972,22 @@ export async function fastRespondAi5(
       return '嗨！我是 AI in 5 📰 想看今天最新的 AI 新闻重点，或查任何 AI 模型与产业动态都可以直接问我！';
     }
     return "Hi! I'm AI in 5 📰 Ask me for today's top AI news highlights, or ask about any AI model or industry updates!";
+  }
+
+  const expandMatch = EXPLICIT_EXPAND_STORY_RE.exec(cleanText);
+  if (expandMatch) {
+    const slotNumber = Number(expandMatch[1] ?? expandMatch[2]);
+    const latest = await fetchLatestPublishedIssue(env);
+    if (latest && Number.isInteger(slotNumber)) {
+      const expanded = formatExpandedStory(
+        latest.issue,
+        slotNumber,
+        decision.detectedLang,
+        siteBase(env),
+        Boolean(event.isVoice),
+      );
+      if (expanded) return expanded;
+    }
   }
 
   if (shouldHandleTodayTopicLookup(cleanText)) {
@@ -926,4 +1062,12 @@ export const ai5GatewayConfig: NarraGatewayConfig<Env> = {
   fetchUpdates: fetchAi5Updates,
   fastRespond: fastRespondAi5,
   resolveA2ACredential: resolveAi5A2ACredential,
+  enableA2AFailureReply: true,
+  thinkingMessage: (lang) =>
+    lang === 'zh-Hant'
+      ? '📰 正在幫你整理最新 AI 新聞與重點分析，稍等一下…'
+      : lang === 'zh-Hans'
+        ? '📰 正在帮你整理最新 AI 新闻与重点分析，稍等一下…'
+        : '📰 Checking the latest AI news details for you, one moment…',
+  buildExtraEnvelopeFields: buildAi5ExtraEnvelopeFields,
 };

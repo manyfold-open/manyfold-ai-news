@@ -20,8 +20,10 @@ import {
   AI5_AGENT_SPEC,
   AI5_MATRIX_ID,
   ai5GatewayConfig,
+  buildAi5ExtraEnvelopeFields,
   fastRespondAi5,
   fetchAi5Updates,
+  formatExpandedStory,
   formatIssueTop3,
   formatTodayTopicReply,
   isLatestIssueQuery,
@@ -1125,5 +1127,146 @@ describe('manyfold-ai-news Narra Gateway', () => {
     expect(formattedLeak).toContain('監管監控與訴訟遭襲事件升級');
     expect(formattedLeak).toContain('基礎設施帳單成本受到關注');
     expect(formattedLeak).not.toMatch(/监控|诉讼|遭袭|基础|账单/);
+  });
+
+  it('wires enableA2AFailureReply, trilingual thinkingMessage, and <=1600 char D1 prefetch in ai5GatewayConfig', async () => {
+    expect(ai5GatewayConfig.enableA2AFailureReply).toBe(true);
+    expect(typeof ai5GatewayConfig.thinkingMessage).toBe('function');
+    expect(typeof ai5GatewayConfig.buildExtraEnvelopeFields).toBe('function');
+
+    const dummyEv = makeEvent({ chatType: 'dm', text: 'compare OpenAI and Anthropic' });
+    const dummyDecision = {
+      shouldReply: true,
+      tier: 0 as const,
+      reason: 'dm',
+      confidence: 1,
+      detectedLang: 'zh-Hant' as const,
+      shouldQuote: false,
+    };
+
+    expect(ai5GatewayConfig.thinkingMessage!('zh-Hant', dummyEv, dummyDecision)).toBe(
+      '📰 正在幫你整理最新 AI 新聞與重點分析，稍等一下…',
+    );
+    expect(ai5GatewayConfig.thinkingMessage!('zh-Hans', dummyEv, { ...dummyDecision, detectedLang: 'zh-Hans' })).toBe(
+      '📰 正在帮你整理最新 AI 新闻与重点分析，稍等一下…',
+    );
+    expect(ai5GatewayConfig.thinkingMessage!('en', dummyEv, { ...dummyDecision, detectedLang: 'en' })).toBe(
+      '📰 Checking the latest AI news details for you, one moment…',
+    );
+
+    // English prefetch includes issue number, date, all stories with headlines, summaries, and source URLs
+    const enPrefetch = await buildAi5ExtraEnvelopeFields(baseEnv, dummyEv, { ...dummyDecision, detectedLang: 'en' });
+    expect(enPrefetch).not.toBeNull();
+    expect(enPrefetch!.d1_prefetched_records).toContain('AI in 5 No. 42 (2026-11-19)');
+    expect(enPrefetch!.d1_prefetched_records).toContain('Qilin Lab open-sources a 70B model');
+    expect(enPrefetch!.d1_prefetched_records).toContain('Northwind’s assistant now remembers past chats');
+    expect(enPrefetch!.d1_prefetched_records).toContain('Paris lab Aster raises €600M');
+    expect(enPrefetch!.d1_prefetched_records).toMatch(/https?:\/\//);
+    expect(enPrefetch!.d1_prefetched_records.length).toBeLessThanOrEqual(1600);
+
+    // Traditional Chinese prefetch converts Simplified-stored issue text cleanly and caps <= 1600 chars even for packed issues
+    const packedDb = sqliteD1();
+    await packedDb.exec(
+      `CREATE TABLE IF NOT EXISTS issues (
+        date TEXT PRIMARY KEY,
+        number INTEGER NOT NULL,
+        status TEXT NOT NULL DEFAULT 'draft',
+        data TEXT NOT NULL,
+        published_at TEXT,
+        updated_at TEXT NOT NULL
+      );`,
+    );
+    const packedEnv: Env = { ...baseEnv, DB: packedDb };
+    const packedIssue = makePublishedIssue('2026-11-20', 99);
+    const baseStory = structuredClone(packedIssue.stories[0]!);
+    packedIssue.stories = Array.from({ length: 8 }, (_, idx) => {
+      const s = structuredClone(baseStory);
+      s.id = `story-${idx + 1}`;
+      s.title.zh = `网络安全实验室第 ${idx + 1} 轮融资与开源模型进展`;
+      s.summary.zh =
+        '这家专注于人工智能网络安全防御与基础设施研发的公司发布新一代开源模型，推理成本大幅下降并且开放商业授权给全球开发者。'.repeat(
+          3,
+        );
+      return s;
+    });
+    packedIssue.today = packedIssue.stories.slice(0, 3).map((s) => ({
+      id: s.id,
+      text: s.title,
+    }));
+    await saveIssue(packedEnv, '2026-11-20', packedIssue, 'published');
+
+    const hantPrefetch = await buildAi5ExtraEnvelopeFields(packedEnv, dummyEv, dummyDecision);
+    expect(hantPrefetch).not.toBeNull();
+    expect(hantPrefetch!.d1_prefetched_records).toContain('AI in 5 No. 99 (2026-11-20)');
+    expect(hantPrefetch!.d1_prefetched_records).toContain('網絡安全實驗室');
+    expect(hantPrefetch!.d1_prefetched_records).not.toMatch(/网络安全|实验室|开源|融资/);
+    expect(hantPrefetch!.d1_prefetched_records.length).toBeLessThanOrEqual(1600);
+
+    // Empty DB returns null cleanly
+    const emptyDb = sqliteD1();
+    await ensureSchema(emptyDb);
+    expect(await buildAi5ExtraEnvelopeFields({ ...baseEnv, DB: emptyDb }, dummyEv, dummyDecision)).toBeNull();
+  });
+
+  it('handles explicit local expand requests (展開第 2 條 / 第 2 条详细说说) in pure zh-Hant/zh-Hans/en while keeping A2A follow-ups null', async () => {
+    const emptyMem = { userMemories: [], roomMemories: [], promptSafeLines: [] };
+    const dmCtx = { roomId: '!dm_expand:matrix.netmind.chat', chatType: 'dm' as const, members: [], recentHistory: [] };
+
+    const expandHantEv = makeEvent({ roomId: dmCtx.roomId, chatType: 'dm', text: '展開第 2 條' });
+    const expandHantDecision = await routeEvent(expandHantEv, dmCtx, AI5_AGENT_SPEC, { nowMs: expandHantEv.timestampMs });
+    expect(expandHantDecision.detectedLang).toBe('zh-Hant');
+    const expandHantReply = await fastRespondAi5(baseEnv, expandHantEv, expandHantDecision, emptyMem);
+    expect(expandHantReply).not.toBeNull();
+    expect(expandHantReply).toContain('AI in 5 第 42 期（2026-11-19）第 2 條');
+    expect(expandHantReply).toContain('為什麼重要：');
+    expect(expandHantReply).toContain('https://app.manyfold.ai/ai-news/zh/2026-11-19/2');
+    expect(expandHantReply).not.toMatch(/\]\(https?:\/\//);
+    expect(expandHantReply).not.toMatch(/默认|记忆|为什么/);
+
+    const expandHansEv = makeEvent({ roomId: dmCtx.roomId, chatType: 'dm', text: '第 2 条详细说说' });
+    const expandHansDecision = await routeEvent(expandHansEv, dmCtx, AI5_AGENT_SPEC, { nowMs: expandHansEv.timestampMs });
+    expect(expandHansDecision.detectedLang).toBe('zh-Hans');
+    const expandHansReply = await fastRespondAi5(baseEnv, expandHansEv, expandHansDecision, emptyMem);
+    expect(expandHansReply).not.toBeNull();
+    expect(expandHansReply).toContain('AI in 5 第 42 期（2026-11-19）第 2 条');
+    expect(expandHansReply).toContain('为什么重要：');
+    expect(expandHansReply).toContain('https://app.manyfold.ai/ai-news/zh/2026-11-19/2');
+
+    // Voice expand omits URLs
+    const expandVoiceReply = await fastRespondAi5(
+      baseEnv,
+      makeEvent({ roomId: dmCtx.roomId, chatType: 'dm', text: '展開第 1 條', isVoice: true }),
+      expandHantDecision,
+      emptyMem,
+    );
+    expect(expandVoiceReply).not.toBeNull();
+    expect(expandVoiceReply).toContain('第 42 期第 1 條');
+    expect(expandVoiceReply).not.toMatch(/https?:\/\//);
+
+    // English formatter helper
+    const enExpanded = formatExpandedStory(makePublishedIssue('2026-11-19', 42), 2, 'en', 'https://app.manyfold.ai/ai-news');
+    expect(enExpanded).toContain('AI in 5 No. 42 (2026-11-19) — Story 2:');
+    expect(enExpanded).toContain('Why it matters:');
+    expect(enExpanded).toContain('https://app.manyfold.ai/ai-news/en/2026-11-19/2');
+
+    // Out-of-range story slot on a shorter issue returns null so A2A can handle gracefully
+    const shortDb = sqliteD1();
+    await shortDb.exec(
+      `CREATE TABLE IF NOT EXISTS issues (
+        date TEXT PRIMARY KEY,
+        number INTEGER NOT NULL,
+        status TEXT NOT NULL DEFAULT 'draft',
+        data TEXT NOT NULL,
+        published_at TEXT,
+        updated_at TEXT NOT NULL
+      );`,
+    );
+    const shortEnv: Env = { ...baseEnv, DB: shortDb };
+    const shortIssue = makePublishedIssue('2026-11-19', 42);
+    shortIssue.stories = shortIssue.stories.slice(0, 2);
+    shortIssue.today = shortIssue.stories.map((s) => ({ id: s.id, text: s.title }));
+    await saveIssue(shortEnv, '2026-11-19', shortIssue, 'published');
+    const outOfRangeEv = makeEvent({ roomId: dmCtx.roomId, chatType: 'dm', text: '展開第 5 條' });
+    expect(await fastRespondAi5(shortEnv, outOfRangeEv, expandHantDecision, emptyMem)).toBeNull();
   });
 });
