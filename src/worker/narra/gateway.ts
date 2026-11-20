@@ -225,6 +225,22 @@ export async function fetchLatestPublishedIssue(
   return null;
 }
 
+function localizeIssueText(raw: string, lang: LangCode): string {
+  const text = plainText(raw);
+  return lang === 'zh-Hant' ? toZhHant(text) : text;
+}
+
+function issueHeadlines(issue: Issue, lang: LangCode, limit = 3): string[] {
+  const fieldLang = lang === 'en' ? 'en' : 'zh';
+  if (issue.stories.length > 0) {
+    return issue.stories.slice(0, limit).map((s) => localizeIssueText(s.title[fieldLang], lang));
+  }
+  if (issue.today.length > 0) {
+    return issue.today.slice(0, limit).map((t) => localizeIssueText(t.text[fieldLang], lang));
+  }
+  return issue.briefs.slice(0, limit).map((b) => localizeIssueText(b.text[fieldLang], lang));
+}
+
 export function formatIssueTop3(
   issue: Issue,
   lang: LangCode,
@@ -232,17 +248,11 @@ export function formatIssueTop3(
   options: { voice?: boolean; greeting?: boolean } = {},
 ): string {
   const fieldLang = lang === 'en' ? 'en' : 'zh';
-  const localize = (raw: string): string => {
-    const text = plainText(raw);
-    return lang === 'zh-Hant' ? toZhHant(text) : text;
-  };
+  const localize = (raw: string): string => localizeIssueText(raw, lang);
   const stories = issue.stories.slice(0, 3);
 
   if (options.voice) {
-    const headlines =
-      stories.length > 0
-        ? stories.map((s) => localize(s.title[fieldLang]))
-        : issue.today.slice(0, 3).map((t) => localize(t.text[fieldLang]));
+    const headlines = issueHeadlines(issue, lang, 3);
     const joined = headlines.join('；');
     if (lang === 'zh-Hant') {
       return `AI in 5 第 ${issue.number} 期重點新聞包括：${headlines.join('、')}。想聽哪一條的詳細內容？`;
@@ -297,6 +307,287 @@ export function formatIssueTop3(
     lines.push(`完整期号： ${issueLink(siteUrl, lang, issue.date)}`);
   } else {
     lines.push(`Full issue: ${issueLink(siteUrl, lang, issue.date)}`);
+  }
+
+  return sanitizeMobileLinks(lines.join('\n'));
+}
+
+const TODAY_OR_RECENT_RE =
+  /今天|今日|最新|最近|新模型|發布|发布|\b(?:today|today'?s|latest|recent|new\s+model|launch(?:ed)?|releas(?:e|ed))\b/i;
+
+const TRACKED_AI_ENTITY_RE =
+  /(?<![a-z])(?:openai|anthropic|claude|gemini|deepmind|deepseek|qwen|kimi|zhipu|nvidia|meta|llama|apple|google|microsoft|tesla|xai|chatgpt|gpt)(?![a-z])|模型|晶片|芯片/gi;
+
+const DEEP_A2A_INTENT_RE =
+  /\b\d{4}-\d{2}-\d{2}\b|(?:story|第)\s*\d+|第\s*[一二三四五1-5][條条則则個个篇]?|展開|展开|詳細|详细|why|compare|correction|remember|forget|為什麼|为什么|怎麼看|怎么看|比較|比较|更正|記得|记得|忘掉|忘記|忘记/i;
+
+const ENTITY_DISPLAY_NAMES: Record<string, string> = {
+  openai: 'OpenAI',
+  anthropic: 'Anthropic',
+  claude: 'Claude',
+  gemini: 'Gemini',
+  deepmind: 'DeepMind',
+  deepseek: 'DeepSeek',
+  qwen: 'Qwen',
+  kimi: 'Kimi',
+  zhipu: 'Zhipu',
+  nvidia: 'NVIDIA',
+  meta: 'Meta',
+  llama: 'Llama',
+  apple: 'Apple',
+  google: 'Google',
+  microsoft: 'Microsoft',
+  tesla: 'Tesla',
+  xai: 'xAI',
+  chatgpt: 'ChatGPT',
+  gpt: 'GPT',
+};
+
+const ENTITY_SEARCH_PATTERNS: Record<string, RegExp> = {
+  openai: /(?<![a-z])openai(?![a-z])/i,
+  anthropic: /(?<![a-z])anthropic(?![a-z])/i,
+  claude: /(?<![a-z])claude(?![a-z])/i,
+  gemini: /(?<![a-z])gemini(?![a-z])/i,
+  deepmind: /(?<![a-z])deepmind(?![a-z])/i,
+  deepseek: /(?:(?<![a-z])deepseek(?![a-z])|深度求索)/i,
+  qwen: /(?:(?<![a-z])qwen(?![a-z])|通義千問|通义千问|千問|千问)/i,
+  kimi: /(?<![a-z])kimi(?![a-z])/i,
+  zhipu: /(?:(?<![a-z])zhipu(?![a-z])|智[谱譜])/i,
+  nvidia: /(?:(?<![a-z])nvidia(?![a-z])|英偉達|英伟达|輝達|辉达)/i,
+  meta: /(?<![a-z])meta(?![a-z])/i,
+  llama: /(?<![a-z])llama(?![a-z])/i,
+  apple: /(?:(?<![a-z])apple(?![a-z])|蘋果|苹果)/i,
+  google: /(?:(?<![a-z])google(?![a-z])|谷歌)/i,
+  microsoft: /(?:(?<![a-z])microsoft(?![a-z])|微軟|微软)/i,
+  tesla: /(?:(?<![a-z])tesla(?![a-z])|特斯拉)/i,
+  xai: /(?<![a-z])xai(?![a-z])/i,
+  chatgpt: /(?<![a-z])chatgpt(?![a-z])/i,
+  gpt: /(?<![a-z])gpt(?![a-z])/i,
+};
+
+interface ExtractedTopicTargets {
+  labels: string[];
+  matchers: RegExp[];
+}
+
+function extractTodayTopicTargets(cleanText: string, lang: LangCode): ExtractedTopicTargets | null {
+  const matches = cleanText.match(TRACKED_AI_ENTITY_RE);
+  if (!matches || matches.length === 0) return null;
+
+  const specificKeys: string[] = [];
+  const topicKeys: string[] = [];
+  const seen = new Set<string>();
+
+  for (const raw of matches) {
+    const key = raw.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    if (key in ENTITY_SEARCH_PATTERNS) {
+      specificKeys.push(key);
+    } else {
+      topicKeys.push(key);
+    }
+  }
+
+  // Prefer specific org/model entities over generic topic words like "模型" so
+  // "OpenAI 或 Anthropic 有發新模型嗎" doesn't falsely match unrelated model stories.
+  if (specificKeys.length > 0) {
+    return {
+      labels: specificKeys.map((k) => ENTITY_DISPLAY_NAMES[k] ?? k),
+      matchers: specificKeys.map((k) => ENTITY_SEARCH_PATTERNS[k]),
+    };
+  }
+
+  const labels: string[] = [];
+  const matchers: RegExp[] = [];
+  const seenTopics = new Set<string>();
+  for (const key of topicKeys) {
+    if (key === '模型' && !seenTopics.has('model')) {
+      seenTopics.add('model');
+      labels.push(lang === 'en' ? 'new models' : 'AI 模型');
+      matchers.push(/\bmodels?\b|模型/i);
+    } else if ((key === '晶片' || key === '芯片') && !seenTopics.has('chip')) {
+      seenTopics.add('chip');
+      labels.push(lang === 'zh-Hant' ? 'AI 晶片' : lang === 'zh-Hans' ? 'AI 芯片' : 'AI chips');
+      matchers.push(/\bchips?\b|\bgpus?\b|晶片|芯片|算力/i);
+    }
+  }
+
+  return labels.length > 0 ? { labels, matchers } : null;
+}
+
+function formatEntityList(labels: string[], lang: LangCode): string {
+  if (labels.length <= 1) return labels[0] ?? '';
+  if (lang !== 'en') return labels.join('、');
+  if (labels.length === 2) return `${labels[0]} and ${labels[1]}`;
+  return `${labels.slice(0, -1).join(', ')}, and ${labels[labels.length - 1]}`;
+}
+
+function shouldHandleTodayTopicLookup(cleanText: string): boolean {
+  if (!TODAY_OR_RECENT_RE.test(cleanText)) return false;
+  if (DEEP_A2A_INTENT_RE.test(cleanText)) return false;
+  return extractTodayTopicTargets(cleanText, 'en') !== null;
+}
+
+/**
+ * Answers today/recent entity or AI-topic questions directly from the latest published D1 issue
+ * without invoking an A2A call. When the entity is absent from today's issue, states so cleanly
+ * and lists today's top headlines with a bare link to the full issue.
+ */
+export function formatTodayTopicReply(
+  issue: Issue,
+  cleanText: string,
+  lang: LangCode,
+  siteUrl: string,
+  voice: boolean,
+): string {
+  const targets = extractTodayTopicTargets(cleanText, lang);
+  if (!targets) {
+    return formatIssueTop3(issue, lang, siteUrl, { voice });
+  }
+
+  const fieldLang = lang === 'en' ? 'en' : 'zh';
+  const localize = (raw: string): string => localizeIssueText(raw, lang);
+  const entityLabel = formatEntityList(targets.labels, lang);
+  const matchesAny = (haystack: string): boolean => targets.matchers.some((re) => re.test(haystack));
+
+  type MatchedEntry =
+    | { kind: 'story'; title: string; summary: string; url: string }
+    | { kind: 'note'; text: string };
+
+  const matched: MatchedEntry[] = [];
+  const matchedStoryIds = new Set<string>();
+
+  issue.stories.forEach((story, idx) => {
+    const todayNote = issue.today.find((t) => t.id === story.id);
+    const haystack = [
+      story.org?.name ?? '',
+      plainText(story.cat.en),
+      plainText(story.cat.zh),
+      plainText(story.title.en),
+      plainText(story.title.zh),
+      plainText(story.summary.en),
+      plainText(story.summary.zh),
+      plainText(story.why.en),
+      plainText(story.why.zh),
+      story.next ? plainText(story.next.en) : '',
+      story.next ? plainText(story.next.zh) : '',
+      todayNote ? plainText(todayNote.text.en) : '',
+      todayNote ? plainText(todayNote.text.zh) : '',
+    ].join('\n');
+
+    if (matchesAny(haystack)) {
+      matchedStoryIds.add(story.id);
+      const pos = storyPosition(issue, story.id) || idx + 1;
+      matched.push({
+        kind: 'story',
+        title: localize(story.title[fieldLang]),
+        summary: localize(story.summary[fieldLang]).slice(0, 140),
+        url: issueLink(siteUrl, lang, issue.date, pos),
+      });
+    }
+  });
+
+  for (const item of issue.today) {
+    if (matchedStoryIds.has(item.id)) continue;
+    const haystack = [plainText(item.text.en), plainText(item.text.zh)].join('\n');
+    if (matchesAny(haystack)) {
+      matched.push({ kind: 'note', text: localize(item.text[fieldLang]) });
+    }
+  }
+
+  for (const brief of issue.briefs) {
+    const haystack = [
+      brief.org?.name ?? '',
+      plainText(brief.src.en),
+      plainText(brief.src.zh),
+      plainText(brief.text.en),
+      plainText(brief.text.zh),
+    ].join('\n');
+    if (matchesAny(haystack)) {
+      matched.push({ kind: 'note', text: localize(brief.text[fieldLang]) });
+    }
+  }
+
+  const topMatches = matched.slice(0, 3);
+  const fullUrl = issueLink(siteUrl, lang, issue.date);
+
+  if (topMatches.length > 0) {
+    if (voice) {
+      const spoken = topMatches.map((m) => (m.kind === 'story' ? m.title : m.text));
+      if (lang === 'zh-Hant') {
+        return `AI in 5 第 ${issue.number} 期（${issue.date}）有提到 ${entityLabel} 的動態：${spoken.join('、')}。想聽哪一條的詳細內容？`;
+      }
+      if (lang === 'zh-Hans') {
+        return `AI in 5 第 ${issue.number} 期（${issue.date}）有提到 ${entityLabel} 的动态：${spoken.join('；')}。想听哪一条的详细内容？`;
+      }
+      return `AI in 5 issue ${issue.number} (${issue.date}) covers ${entityLabel}: ${spoken.join('; ')}. Which item would you like to hear more about?`;
+    }
+
+    const lines: string[] = [];
+    if (lang === 'zh-Hant') {
+      lines.push(`AI in 5 第 ${issue.number} 期（${issue.date}）關於 ${entityLabel} 的今日動態：`);
+    } else if (lang === 'zh-Hans') {
+      lines.push(`AI in 5 第 ${issue.number} 期（${issue.date}）关于 ${entityLabel} 的今日动态：`);
+    } else {
+      lines.push(`AI in 5 No. ${issue.number} (${issue.date}) — updates on ${entityLabel}:`);
+    }
+
+    topMatches.forEach((entry, idx) => {
+      if (entry.kind === 'story') {
+        lines.push(`${idx + 1}. ${entry.title} — ${entry.summary}`);
+        lines.push(entry.url);
+      } else {
+        lines.push(`${idx + 1}. ${entry.text}`);
+      }
+    });
+
+    if (lang === 'zh-Hant') {
+      lines.push(`完整期號： ${fullUrl}`);
+    } else if (lang === 'zh-Hans') {
+      lines.push(`完整期号： ${fullUrl}`);
+    } else {
+      lines.push(`Full issue: ${fullUrl}`);
+    }
+
+    return sanitizeMobileLinks(lines.join('\n'));
+  }
+
+  const headlines = issueHeadlines(issue, lang, 3);
+  if (voice) {
+    if (lang === 'zh-Hant') {
+      return `AI in 5 今天第 ${issue.number} 期（${issue.date}）沒有提到 ${entityLabel} 的相關更新。今天重點新聞包括：${headlines.join('、')}。想聽哪一條的詳細內容？`;
+    }
+    if (lang === 'zh-Hans') {
+      return `AI in 5 今天第 ${issue.number} 期（${issue.date}）没有提到 ${entityLabel} 的相关更新。今天重点新闻包括：${headlines.join('；')}。想听哪一条的详细内容？`;
+    }
+    return `Today's AI in 5 issue ${issue.number} (${issue.date}) doesn't mention updates from ${entityLabel}. Today's top stories include ${headlines.join('; ')}. Which story would you like to hear more about?`;
+  }
+
+  const lines: string[] = [];
+  if (lang === 'zh-Hant') {
+    lines.push(`AI in 5 今天第 ${issue.number} 期（${issue.date}）沒有提到 ${entityLabel} 的相關更新。`);
+    lines.push('今天重點新聞頭條：');
+  } else if (lang === 'zh-Hans') {
+    lines.push(`AI in 5 今天第 ${issue.number} 期（${issue.date}）没有提到 ${entityLabel} 的相关更新。`);
+    lines.push('今天重点新闻头条：');
+  } else {
+    lines.push(
+      `Today's published AI in 5 issue (No. ${issue.number}, ${issue.date}) doesn't mention updates from ${entityLabel} today.`,
+    );
+    lines.push("Today's top headlines:");
+  }
+
+  headlines.forEach((headline, idx) => {
+    lines.push(`${idx + 1}. ${headline}`);
+  });
+
+  if (lang === 'zh-Hant') {
+    lines.push(`完整期號： ${fullUrl}`);
+  } else if (lang === 'zh-Hans') {
+    lines.push(`完整期号： ${fullUrl}`);
+  } else {
+    lines.push(`Full issue: ${fullUrl}`);
   }
 
   return sanitizeMobileLinks(lines.join('\n'));
@@ -502,6 +793,19 @@ export async function fastRespondAi5(
       return '嗨！我是 AI in 5 📰 想看今天最新的 AI 新闻重点，或查任何 AI 模型与产业动态都可以直接问我！';
     }
     return "Hi! I'm AI in 5 📰 Ask me for today's top AI news highlights, or ask about any AI model or industry updates!";
+  }
+
+  if (shouldHandleTodayTopicLookup(cleanText)) {
+    const latest = await fetchLatestPublishedIssue(env);
+    if (!latest) return null;
+
+    return formatTodayTopicReply(
+      latest.issue,
+      cleanText,
+      decision.detectedLang,
+      siteBase(env),
+      Boolean(event.isVoice),
+    );
   }
 
   if (!isLatestIssueQuery(event.text, effectiveChatType)) {

@@ -22,6 +22,7 @@ import {
   fastRespondAi5,
   fetchAi5Updates,
   formatIssueTop3,
+  formatTodayTopicReply,
   isLatestIssueQuery,
   resolveAi5A2ACredential,
 } from '../src/worker/narra/gateway';
@@ -848,5 +849,128 @@ describe('manyfold-ai-news Narra Gateway', () => {
       );
       expect(dec.shouldReply, ramenText).toBe(false);
     }
+  });
+
+  it('H1 local D1 today-topic lookup answers OpenAI/Anthropic model question without A2A calls', async () => {
+    const emptyMem = { userMemories: [], roomMemories: [], promptSafeLines: [] };
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const grpCtx = {
+      roomId: '!grp_h1_local:matrix.netmind.chat',
+      chatType: 'group' as const,
+      members: [
+        { matrixId: '@alice:matrix.netmind.chat', displayName: 'Alice', isAgent: false },
+        { matrixId: AI5_MATRIX_ID, displayName: 'AI in 5', isAgent: true },
+        { matrixId: '@agent-b2b526f3:matrix.netmind.chat', displayName: 'London Chinese Food', isAgent: true },
+      ],
+      recentHistory: [],
+    };
+    const h1Text = '剛在唐人街吃完火鍋超撐，順便問一下今天 OpenAI 或 Anthropic 有發新模型嗎？';
+    const h1Event = makeEvent({ roomId: grpCtx.roomId, text: h1Text, timestampMs: 1_763_550_000_000 });
+    const h1Decision = await routeEvent(h1Event, grpCtx, AI5_AGENT_SPEC, { nowMs: h1Event.timestampMs });
+    expect(h1Decision.shouldReply).toBe(true);
+    expect(h1Decision.detectedLang).toBe('zh-Hant');
+
+    // No OpenAI/Anthropic in SAMPLE_ISSUE -> clean zh-Hant reply noting absence + top headlines + bare URL, 0 A2A calls
+    const h1Reply = await fastRespondAi5(baseEnv, h1Event, h1Decision, emptyMem);
+    expect(h1Reply).not.toBeNull();
+    expect(h1Reply).toContain('第 42 期（2026-11-19）沒有提到 OpenAI、Anthropic 的相關更新');
+    expect(h1Reply).toContain('今天重點新聞頭條');
+    expect(h1Reply).toContain('麒麟實驗室開源 70B 模型');
+    expect(h1Reply).toContain('https://app.manyfold.ai/ai-news/zh/2026-11-19');
+    expect(h1Reply).not.toMatch(/\]\(https?:\/\//);
+    expect(h1Reply).not.toMatch(/实验室|开源|默认|记忆/);
+    expect(fetchSpy).not.toHaveBeenCalled();
+
+    // Also test when latest issue DOES contain Anthropic & OpenAI updates (with Simplified Chinese converted to zh-Hant)
+    const createIssuesTable = async (targetDb: D1Database) => {
+      await targetDb.exec(
+        `CREATE TABLE IF NOT EXISTS issues (
+          date TEXT PRIMARY KEY,
+          number INTEGER NOT NULL,
+          status TEXT NOT NULL DEFAULT 'draft',
+          data TEXT NOT NULL,
+          published_at TEXT,
+          updated_at TEXT NOT NULL
+        );`,
+      );
+    };
+    const topicDb = sqliteD1();
+    await createIssuesTable(topicDb);
+    const topicEnv: Env = { ...baseEnv, DB: topicDb };
+    const matchedIssue = makePublishedIssue('2026-11-20', 43);
+    matchedIssue.stories[0].org = { name: 'Anthropic', logo: matchedIssue.stories[0].org!.logo };
+    matchedIssue.stories[0].title = {
+      en: 'Anthropic launches Claude 4.5 for coding agents',
+      zh: 'Anthropic 发布 Claude 4.5 编码模型',
+    };
+    matchedIssue.stories[0].summary = {
+      en: 'Anthropic released Claude 4.5 with <m0>40%</m0> lower latency on tool-use tasks.',
+      zh: 'Anthropic 宣布发布新一代模型，工具调用延迟降低 <m0>40%</m0>。',
+    };
+    matchedIssue.briefs[0].org = { name: 'OpenAI', logo: matchedIssue.briefs[0].org!.logo };
+    matchedIssue.briefs[0].text = {
+      en: 'OpenAI lowered GPT API batch pricing by 25%.',
+      zh: 'OpenAI 将 GPT 批量接口价格下调 25%。',
+    };
+    await saveIssue(topicEnv, '2026-11-20', matchedIssue, 'published');
+
+    const matchedHant = await fastRespondAi5(topicEnv, h1Event, h1Decision, emptyMem);
+    expect(matchedHant).not.toBeNull();
+    expect(matchedHant).toContain('第 43 期（2026-11-20）關於 OpenAI、Anthropic 的今日動態');
+    expect(matchedHant).toContain('Anthropic 發布 Claude 4.5 編碼模型');
+    expect(matchedHant).toContain('OpenAI 將 GPT 批量接口價格下調 25%');
+    expect(matchedHant).toContain('https://app.manyfold.ai/ai-news/zh/2026-11-20/1');
+    expect(matchedHant).toContain('https://app.manyfold.ai/ai-news/zh/2026-11-20');
+    expect(matchedHant).not.toMatch(/\]\(https?:\/\//);
+    expect(matchedHant).not.toMatch(/发布|编码|将|价格/);
+
+    // English & voice variants
+    const enMatchReply = formatTodayTopicReply(
+      matchedIssue,
+      'Did OpenAI or Anthropic launch anything today?',
+      'en',
+      'https://app.manyfold.ai/ai-news',
+      false,
+    );
+    expect(enMatchReply).toContain('AI in 5 No. 43 (2026-11-20) — updates on OpenAI and Anthropic:');
+    expect(enMatchReply).toContain('Anthropic launches Claude 4.5 for coding agents');
+    expect(enMatchReply).toContain('https://app.manyfold.ai/ai-news/en/2026-11-20/1');
+    expect(enMatchReply).toContain('Full issue: https://app.manyfold.ai/ai-news/en/2026-11-20');
+
+    const voiceNoMatch = formatTodayTopicReply(
+      matchedIssue,
+      'Any recent DeepSeek model launches?',
+      'en',
+      'https://app.manyfold.ai/ai-news',
+      true,
+    );
+    expect(voiceNoMatch).toContain("doesn't mention updates from DeepSeek");
+    expect(voiceNoMatch).not.toMatch(/https?:\/\//);
+    expect(voiceNoMatch).not.toContain('[');
+
+    // Deep/A2A intents, non-today entity queries, and empty D1 still return null for A2A fallback
+    for (const a2aText of [
+      '為什麼今天 OpenAI 發布新模型？',
+      '詳細講講今天 Anthropic 發布的新模型',
+      'Compare today OpenAI launch with Anthropic',
+      '2026-11-18 OpenAI 有發新模型嗎？',
+      'OpenAI 有什麼消息',
+    ]) {
+      const a2aReply = await fastRespondAi5(
+        topicEnv,
+        makeEvent({ roomId: grpCtx.roomId, text: a2aText }),
+        { ...h1Decision, reason: 'explicit_mention' },
+        emptyMem,
+      );
+      expect(a2aReply, a2aText).toBeNull();
+    }
+
+    const emptyDb = sqliteD1();
+    await createIssuesTable(emptyDb);
+    const noIssueReply = await fastRespondAi5({ ...baseEnv, DB: emptyDb }, h1Event, h1Decision, emptyMem);
+    expect(noIssueReply).toBeNull();
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
