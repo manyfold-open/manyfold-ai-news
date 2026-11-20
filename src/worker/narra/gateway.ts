@@ -286,17 +286,17 @@ export function formatIssueTop3(
       const title = localize(story.title[fieldLang]);
       const summary = localize(story.summary[fieldLang]).slice(0, 140);
       const url = issueLink(siteUrl, lang, issue.date, pos);
-      lines.push(`${idx + 1}. ${title} — ${summary}`);
+      lines.push(`• ${title} — ${summary}`);
       lines.push(url);
     });
   } else if (issue.today.length > 0) {
-    issue.today.slice(0, 3).forEach((item, idx) => {
-      lines.push(`${idx + 1}. ${localize(item.text[fieldLang])}`);
+    issue.today.slice(0, 3).forEach((item) => {
+      lines.push(`• ${localize(item.text[fieldLang])}`);
     });
     lines.push(issueLink(siteUrl, lang, issue.date));
   } else {
-    issue.briefs.slice(0, 3).forEach((brief, idx) => {
-      lines.push(`${idx + 1}. ${localize(brief.text[fieldLang])}`);
+    issue.briefs.slice(0, 3).forEach((brief) => {
+      lines.push(`• ${localize(brief.text[fieldLang])}`);
     });
     lines.push(issueLink(siteUrl, lang, issue.date));
   }
@@ -533,12 +533,12 @@ export function formatTodayTopicReply(
       lines.push(`AI in 5 No. ${issue.number} (${issue.date}) — updates on ${entityLabel}:`);
     }
 
-    topMatches.forEach((entry, idx) => {
+    topMatches.forEach((entry) => {
       if (entry.kind === 'story') {
-        lines.push(`${idx + 1}. ${entry.title} — ${entry.summary}`);
+        lines.push(`• ${entry.title} — ${entry.summary}`);
         lines.push(entry.url);
       } else {
-        lines.push(`${idx + 1}. ${entry.text}`);
+        lines.push(`• ${entry.text}`);
       }
     });
 
@@ -578,8 +578,8 @@ export function formatTodayTopicReply(
     lines.push("Today's top headlines:");
   }
 
-  headlines.forEach((headline, idx) => {
-    lines.push(`${idx + 1}. ${headline}`);
+  headlines.forEach((headline) => {
+    lines.push(`• ${headline}`);
   });
 
   if (lang === 'zh-Hant') {
