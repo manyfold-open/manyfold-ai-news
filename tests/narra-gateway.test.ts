@@ -28,6 +28,7 @@ import {
   formatTodayTopicReply,
   isLatestIssueQuery,
   resolveAi5A2ACredential,
+  truncateSummary,
 } from '../src/worker/narra/gateway';
 import type { Issue } from '../src/shared/issue';
 import type { Env } from '../src/worker/types';
@@ -1268,5 +1269,105 @@ describe('manyfold-ai-news Narra Gateway', () => {
     await saveIssue(shortEnv, '2026-11-19', shortIssue, 'published');
     const outOfRangeEv = makeEvent({ roomId: dmCtx.roomId, chatType: 'dm', text: '展開第 5 條' });
     expect(await fastRespondAi5(shortEnv, outOfRangeEv, expandHantDecision, emptyMem)).toBeNull();
+  });
+
+  it('fast-expands English expand commands ("Expand item 1", "more on story 2", "details for #3") and works in group active_session', async () => {
+    const emptyMem = { userMemories: [], roomMemories: [], promptSafeLines: [] };
+    const dmCtx = { roomId: '!dm_expand_en:matrix.netmind.chat', chatType: 'dm' as const, members: [], recentHistory: [] };
+
+    const expand1Ev = makeEvent({ roomId: dmCtx.roomId, chatType: 'dm', text: 'Expand item 1' });
+    const expand1Dec = await routeEvent(expand1Ev, dmCtx, AI5_AGENT_SPEC, { nowMs: expand1Ev.timestampMs });
+    expect(expand1Dec.shouldReply).toBe(true);
+    expect(expand1Dec.detectedLang).toBe('en');
+    const expand1Reply = await fastRespondAi5(baseEnv, expand1Ev, expand1Dec, emptyMem);
+    expect(expand1Reply).not.toBeNull();
+    expect(expand1Reply).toContain('AI in 5 No. 42 (2026-11-19) — Story 1:');
+    expect(expand1Reply).toContain('Qilin Lab open-sources a 70B model');
+    expect(expand1Reply).toContain('Why it matters:');
+    expect(expand1Reply).toContain('https://app.manyfold.ai/ai-news/en/2026-11-19/1');
+    expect(expand1Reply).not.toMatch(/\]\(https?:\/\//);
+    expect(expand1Reply).not.toMatch(/[\u4e00-\u9fff]/);
+
+    // Additional English variants: "more on story 2" and "details for #3"
+    const more2Ev = makeEvent({ roomId: dmCtx.roomId, chatType: 'dm', text: 'more on story 2' });
+    const more2Dec = await routeEvent(more2Ev, dmCtx, AI5_AGENT_SPEC, { nowMs: more2Ev.timestampMs });
+    const more2Reply = await fastRespondAi5(baseEnv, more2Ev, more2Dec, emptyMem);
+    expect(more2Reply).toContain('AI in 5 No. 42 (2026-11-19) — Story 2:');
+    expect(more2Reply).toContain('https://app.manyfold.ai/ai-news/en/2026-11-19/2');
+
+    const details3Ev = makeEvent({ roomId: dmCtx.roomId, chatType: 'dm', text: 'details for #3' });
+    const details3Dec = await routeEvent(details3Ev, dmCtx, AI5_AGENT_SPEC, { nowMs: details3Ev.timestampMs });
+    const details3Reply = await fastRespondAi5(baseEnv, details3Ev, details3Dec, emptyMem);
+    expect(details3Reply).toContain('AI in 5 No. 42 (2026-11-19) — Story 3:');
+    expect(details3Reply).toContain('https://app.manyfold.ai/ai-news/en/2026-11-19/3');
+
+    // Unmentioned group active_session follow-up "Expand item 1" must expand (not [NO_REPLY])
+    const groupExpandReply = await fastRespondAi5(
+      baseEnv,
+      makeEvent({ roomId: '!grp_expand_en:matrix.netmind.chat', chatType: 'group', text: 'Expand item 1' }),
+      {
+        shouldReply: true,
+        tier: 0,
+        reason: 'active_session',
+        confidence: 0.9,
+        detectedLang: 'en',
+        shouldQuote: false,
+      },
+      emptyMem,
+    );
+    expect(groupExpandReply).toContain('AI in 5 No. 42 (2026-11-19) — Story 1:');
+  });
+
+  it('truncates long English summaries cleanly at word boundaries with … in truncateSummary, formatIssueTop3, and formatTodayTopicReply', () => {
+    const shortText = 'Short summary stays intact.';
+    expect(truncateSummary(shortText, 150)).toBe(shortText);
+
+    const longEn =
+      'European regulators warned that current model evaluations and enterprise guardrails are still not adequate to protect downstream healthcare operators from subtle reasoning failures.';
+    // Verify the naive slice(0, 140) would have cut mid-word ("adequate to prote" / "downstream healthca")
+    const truncated116 = truncateSummary(longEn, 116);
+    expect(truncated116.length).toBeLessThanOrEqual(116);
+    expect(truncated116.endsWith('…')).toBe(true);
+    expect(truncated116).not.toContain('adequate to prote');
+    expect(truncated116).toContain('adequate to…');
+
+    const truncated150 = truncateSummary(longEn, 150);
+    expect(truncated150.length).toBeLessThanOrEqual(150);
+    expect(truncated150.endsWith('…')).toBe(true);
+    // Must end on a complete word before '…' (last word matches a whole word in original text)
+    const lastWord = truncated150.slice(0, -1).split(/\s+/).pop()!;
+    expect(new RegExp(`\\b${lastWord}\\b`).test(longEn)).toBe(true);
+
+    // End-to-end through formatIssueTop3 and formatTodayTopicReply
+    const longIssue = makePublishedIssue('2026-11-20', 43);
+    longIssue.stories[0]!.title.en = 'OpenAI safety audit raises enterprise questions';
+    // Length before "protect" is 144 chars so a naive 149-char slice would cut mid-word to "adequate to prote"
+    longIssue.stories[0]!.summary.en =
+      'OpenAI published a new safety framework after independent external auditors warned that current enterprise guardrails are still not adequate to protect regulated deployments in finance and healthcare.';
+    expect(longIssue.stories[0]!.summary.en.slice(0, 149)).toMatch(/adequate to prote$/);
+
+    const top3Out = formatIssueTop3(longIssue, 'en', 'https://app.manyfold.ai/ai-news');
+    const storyLine = top3Out.split('\n').find((l) => l.includes('OpenAI safety audit raises enterprise questions'))!;
+    expect(storyLine).toBeDefined();
+    expect(storyLine.endsWith('…')).toBe(true);
+    expect(storyLine).toContain('adequate to…');
+    expect(storyLine).not.toMatch(/adequate to pr[a-z]*…$/);
+    const top3LastWord = storyLine.slice(0, -1).split(/\s+/).pop()!;
+    expect(new RegExp(`\\b${top3LastWord}\\b`).test(longIssue.stories[0]!.summary.en)).toBe(true);
+
+    const topicOut = formatTodayTopicReply(
+      longIssue,
+      'Any OpenAI news today?',
+      'en',
+      'https://app.manyfold.ai/ai-news',
+      false,
+    );
+    const topicStoryLine = topicOut.split('\n').find((l) => l.includes('OpenAI safety audit raises enterprise questions'))!;
+    expect(topicStoryLine).toBeDefined();
+    expect(topicStoryLine.endsWith('…')).toBe(true);
+    expect(topicStoryLine).toContain('adequate to…');
+    expect(topicStoryLine).not.toMatch(/adequate to pr[a-z]*…$/);
+    const topicLastWord = topicStoryLine.slice(0, -1).split(/\s+/).pop()!;
+    expect(new RegExp(`\\b${topicLastWord}\\b`).test(longIssue.stories[0]!.summary.en)).toBe(true);
   });
 });
