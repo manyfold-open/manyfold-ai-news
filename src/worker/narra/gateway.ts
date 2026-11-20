@@ -124,6 +124,7 @@ export const AI5_AGENT_SPEC: AgentSpec = {
     '更正',
     /\bai\b.{0,16}(?:news|briefing|issue|updates?|headlines?|新闻|新聞|要闻|要聞|资讯|資訊|动态|動態|消息|日报|日報|简报|簡報|头条|頭條)/i,
     /(?:news|briefing|issue|today'?s|latest|新闻|新聞|要闻|要聞|资讯|資訊|日报|日報|简报|簡報|头条|頭條).{0,16}\bai\b/i,
+    /ai\s*圈.{0,8}(?:大事|新聞|新闻|動態|动态|消息)/i,
     /今日(?:三條|三条|要聞|要闻|頭條|头条|快報|快报)/,
     /(?:today'?s|latest)\s+(?:ai\s+)?(?:issue|news|briefing|top\s*3|stories)/i,
   ],
@@ -377,7 +378,7 @@ export function formatIssueTop3(
 }
 
 const TODAY_OR_RECENT_RE =
-  /今天|今日|最新|最近|新模型|發布|发布|\b(?:today|today'?s|latest|recent|new\s+model|launch(?:ed)?|releas(?:e|ed))\b/i;
+  /今天|今日|這週|这周|本週|本周|最新|最近|新模型|新消息|新動態|新动态|新功能|更新|發布|发布|\b(?:today|today'?s|this\s+week|latest|recent|new\s+model|launch(?:ed)?|releas(?:e|ed))\b/i;
 
 const TRACKED_AI_ENTITY_RE =
   /(?<![a-z])(?:openai|anthropic|claude|gemini|deepmind|deepseek|qwen|kimi|zhipu|nvidia|meta|llama|apple|google|microsoft|tesla|xai|chatgpt|gpt)(?![a-z])|模型|晶片|芯片/gi;
@@ -696,7 +697,7 @@ const SPECIFIC_QUERY_RE =
   /\b\d{4}-\d{2}-\d{2}\b|(?:story|第)\s*\d+|第\s*[一二三四五1-5][條条則则個个篇]?|展開|展开|詳細|详细|openai|anthropic|claude|gemini|deepmind|deepseek|qwen|kimi|zhipu|nvidia|meta|llama|apple|google|microsoft|tesla|xai|search|find|why|compare|correction|remember|forget|搜尋|搜索|查找|查一下|為什麼|为什么|怎麼看|怎么看|比較|比较|更正|記得|记得|忘掉|忘記|忘记/i;
 
 const LATEST_NEWS_QUERY_RE =
-  /(?:today'?s|latest|recent|new)\s+(?:ai\s+)?(?:issue|news|briefing|stories|headlines?|top\s*3|summary)|what'?s\s+(?:new|big|happening)\s+in\s+ai|anything\s+big\s+in\s+ai|today\s+in\s+3|ai\s+in\s+5\s+today|今天(?:有(?:什麼|什么))?\s*(?:ai)?\s*(?:新聞|新闻|要聞|要闻|頭條|头条|快報|快报|大新聞|大新闻)|今日\s*(?:ai)?\s*(?:新聞|新闻|要聞|要闻|三條|三条|簡報|简报|日報|日报|焦點|焦点)|最新(?:一期|的?\s*ai\s*(?:新聞|新闻|簡報|简报|要聞|要闻|消息))|今天的三[條条]/i;
+  /(?:today'?s|latest|recent|new)\s+(?:ai\s+)?(?:issue|news|briefing|stories|headlines?|top\s*3|summary)|what'?s\s+(?:new|big|happening)\s+in\s+ai|anything\s+big\s+in\s+ai|today\s+in\s+3|ai\s+in\s+5\s+today|今天(?:有(?:什麼|什么))?\s*(?:ai)?\s*(?:新聞|新闻|要聞|要闻|頭條|头条|快報|快报|大新聞|大新闻)|今日\s*(?:ai)?\s*(?:新聞|新闻|要聞|要闻|三條|三条|簡報|简报|日報|日报|焦點|焦点)|最新(?:一期|的?\s*ai\s*(?:新聞|新闻|簡報|简报|要聞|要闻|消息))|今天的三[條条]|(?:今天|今日|這週|这周|本週|本周|最近).{0,6}ai\s*(?:圈|界|行業|行业)?(?:發生了?|发生了?|有)?(?:什麼|什么)?(?:大事|動態|动态|消息|熱點|热点|新聞|新闻|新發布|新发布)/i;
 
 const CJK_CHAR_RE = /[\u3400-\u9FFF\uF900-\uFAFF]/;
 const escapeKeywordRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
