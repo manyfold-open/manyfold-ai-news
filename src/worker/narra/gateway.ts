@@ -596,6 +596,35 @@ export function formatTodayTopicReply(
 const BARE_GREETING_RE =
   /^(?:hi|hello|hey|yo|good\s*(?:morning|afternoon|evening)|早安|早上好|你好|您好|哈囉|哈啰|嗨|在嗎|在吗)[!！?？。\s]*$/i;
 
+const THANKS_RE =
+  /(?:謝謝|谢谢|感謝|感谢|多謝|多谢|謝啦|谢啦|\b(?:thanks|thank\s+you|thx|tysm|cheers)\b)/i;
+
+const CAPABILITY_RE =
+  /你能(?:幫我|帮我)?(?:查|做)(?:什麼|什么|哪些)|你可以(?:幫我|帮我)?(?:查|做)(?:什麼|什么|哪些)|what\s+can\s+you\s+(?:do|help|check)/i;
+
+const DM_OFF_TOPIC_RE =
+  /會下雨|会下雨|下雨|天氣|天气|rain\s+today|weather\s+forecast|forecast|比特幣|比特币|bitcoin|btc|股價|股价|匯率|汇率|中餐|火鍋|火锅|餐廳|餐厅|塔羅|塔罗|求籤|求签/i;
+
+function thanksReplyAi5(lang: LangCode): string {
+  if (lang === 'zh-Hant') {
+    return '不客氣！隨時想看今日 AI 新聞重點或查特定 AI 模型動態，直接問我就好 📰';
+  }
+  if (lang === 'zh-Hans') {
+    return '不客气！随时想看今日 AI 新闻重点或查特定 AI 模型动态，直接问我就好 📰';
+  }
+  return "You're welcome! Ask anytime for today's top AI news or updates on any AI model 📰";
+}
+
+function offTopicRedirectAi5(lang: LangCode): string {
+  if (lang === 'zh-Hant') {
+    return '我主要是幫你追蹤每日 AI 新聞重點、模型發布與產業動態，天氣或非 AI 話題比較不在我的範圍喔！要看看今天的 AI 重點新聞嗎？';
+  }
+  if (lang === 'zh-Hans') {
+    return '我主要是帮你追踪每日 AI 新闻重点、模型发布与产业动态，天气或非 AI 话题比较不在我的范围哦！要看看今天的 AI 重点新闻吗？';
+  }
+  return "I focus on daily AI news briefings, model launches, and industry updates, so that's a bit outside my lane! Want to see today's top AI stories?";
+}
+
 const SPECIFIC_QUERY_RE =
   /\b\d{4}-\d{2}-\d{2}\b|(?:story|第)\s*\d+|第\s*[一二三四五1-5][條条則则個个篇]?|展開|展开|詳細|详细|openai|anthropic|claude|gemini|deepmind|deepseek|qwen|kimi|zhipu|nvidia|meta|llama|apple|google|microsoft|tesla|xai|search|find|why|compare|correction|remember|forget|搜尋|搜索|查找|查一下|為什麼|为什么|怎麼看|怎么看|比較|比较|更正|記得|记得|忘掉|忘記|忘记/i;
 
@@ -742,6 +771,26 @@ export async function fetchAi5Updates(env: Env, sinceIso: string): Promise<Agent
   }));
 }
 
+function isThanksMessage(cleanText: string): boolean {
+  if (!cleanText || /[?？]\s*$/.test(cleanText)) return false;
+  if (!THANKS_RE.test(cleanText)) return false;
+  if (
+    hasSpecKeywordHit(cleanText, AI5_AGENT_SPEC.domainKeywords) ||
+    hasSpecKeywordHit(cleanText, AI5_AGENT_SPEC.antiKeywords) ||
+    DM_OFF_TOPIC_RE.test(cleanText) ||
+    SPECIFIC_QUERY_RE.test(cleanText) ||
+    LATEST_NEWS_QUERY_RE.test(cleanText) ||
+    CAPABILITY_RE.test(cleanText) ||
+    shouldHandleTodayTopicLookup(cleanText) ||
+    /(?:嗎|吗|什麼|什么|怎麼|怎么|請問|请问|幫我|帮我|查一下|告訴我|告诉我|\b(?:can\s+you|could\s+you|tell\s+me|show\s+me|explain|more\s+about)\b)/i.test(
+      cleanText,
+    )
+  ) {
+    return false;
+  }
+  return true;
+}
+
 export async function fastRespondAi5(
   env: Env,
   event: InboundEvent,
@@ -772,12 +821,22 @@ export async function fastRespondAi5(
     ) {
       return '[NO_REPLY]';
     }
+    if (isThanksMessage(cleanText)) {
+      return '[NO_REPLY]';
+    }
+  }
+
+  if (
+    (effectiveChatType === 'dm' || decision.reason === 'explicit_mention' || decision.reason === 'reply_to_self') &&
+    isThanksMessage(cleanText)
+  ) {
+    return thanksReplyAi5(decision.detectedLang);
   }
 
   const bareText = cleanText.replace(/^[!！?？.,，。:：;；\s]+|[!！?？.,，。:：;；\s]+$/g, '');
   if (
     (effectiveChatType === 'dm' || decision.reason === 'explicit_mention') &&
-    (!bareText || isBareGreeting(cleanText))
+    (!bareText || isBareGreeting(cleanText) || (CAPABILITY_RE.test(cleanText) && !SPECIFIC_QUERY_RE.test(cleanText)))
   ) {
     const latest = await fetchLatestPublishedIssue(env);
     if (latest) {
@@ -806,6 +865,17 @@ export async function fastRespondAi5(
       siteBase(env),
       Boolean(event.isVoice),
     );
+  }
+
+  if (
+    (effectiveChatType === 'dm' || decision.reason === 'explicit_mention') &&
+    !isLatestIssueQuery(event.text, effectiveChatType) &&
+    !shouldHandleTodayTopicLookup(cleanText) &&
+    !hasSpecKeywordHit(cleanText, AI5_AGENT_SPEC.domainKeywords) &&
+    !SPECIFIC_QUERY_RE.test(cleanText) &&
+    (hasSpecKeywordHit(cleanText, AI5_AGENT_SPEC.antiKeywords) || DM_OFF_TOPIC_RE.test(cleanText))
+  ) {
+    return offTopicRedirectAi5(decision.detectedLang);
   }
 
   if (!isLatestIssueQuery(event.text, effectiveChatType)) {
