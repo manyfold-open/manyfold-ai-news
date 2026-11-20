@@ -1370,4 +1370,80 @@ describe('manyfold-ai-news Narra Gateway', () => {
     const topicLastWord = topicStoryLine.slice(0, -1).split(/\s+/).pop()!;
     expect(new RegExp(`\\b${topicLastWord}\\b`).test(longIssue.stories[0]!.summary.en)).toBe(true);
   });
+
+  it('matches expanded AI5 domainKeywords and yields cleanly on MFD structured dataset antiKeywords', async () => {
+    const grpCtx = {
+      roomId: '!grp_qa160:matrix.netmind.chat',
+      chatType: 'group' as const,
+      members: [
+        { matrixId: '@alice:matrix.netmind.chat', displayName: 'Alice', isAgent: false },
+        { matrixId: AI5_MATRIX_ID, displayName: 'AI in 5', isAgent: true },
+        { matrixId: '@agent-37b08ab6:matrix.netmind.chat', displayName: 'Manyfold Data', isAgent: true },
+      ],
+      recentHistory: [],
+    };
+    const nowMs = 1_763_550_000_000;
+    const threshold = AI5_AGENT_SPEC.silenceThreshold ?? 0.55;
+
+    expect(AI5_AGENT_SPEC.domainKeywords).toEqual(
+      expect.arrayContaining([
+        'AI圈',
+        'ai 圈',
+        'google ai',
+        'meta ai',
+        'llama',
+        'grok',
+        'xai',
+        'mistral',
+        'qwen',
+        '通義',
+        '通义',
+        'ai動態',
+        'ai动态',
+        'ai新發布',
+        'ai新发布',
+        'ai大事',
+      ]),
+    );
+    expect(AI5_AGENT_SPEC.antiKeywords).toEqual(
+      expect.arrayContaining([
+        'data center',
+        'data centers',
+        'datacenter',
+        'gigawatt',
+        '數據中心',
+        '数据中心',
+        '資料中心',
+        '资料中心',
+        '算力中心',
+        '研討會',
+        '研讨会',
+        '投稿',
+        '學術會議',
+        '学术会议',
+        '人形機器人',
+        '人形机器人',
+        'robotaxi',
+      ]),
+    );
+
+    for (const aiNewsQuery of [
+      '今天 AI 圈发生了什么大事？',
+      'Google AI 这周有什么新发布？',
+      'Meta Llama 最近有什么新消息？',
+    ]) {
+      const ev = makeEvent({ roomId: grpCtx.roomId, text: aiNewsQuery, timestampMs: nowMs });
+      expect(heuristicDomainScore(ev, AI5_AGENT_SPEC, grpCtx), aiNewsQuery).toBeGreaterThanOrEqual(threshold);
+      const decision = await routeEvent(ev, grpCtx, AI5_AGENT_SPEC, { nowMs });
+      expect(decision.shouldReply, aiNewsQuery).toBe(true);
+      expect(decision.reason, aiNewsQuery).toBe('domain_match');
+    }
+
+    const mfdDataCenterQuery = '最近有哪些新的 AI 数据中心或算力中心项目？';
+    const mfdEv = makeEvent({ roomId: grpCtx.roomId, text: mfdDataCenterQuery, timestampMs: nowMs });
+    expect(heuristicDomainScore(mfdEv, AI5_AGENT_SPEC, grpCtx), mfdDataCenterQuery).toBeLessThan(threshold);
+    const mfdDecision = await routeEvent(mfdEv, grpCtx, AI5_AGENT_SPEC, { nowMs });
+    expect(mfdDecision.shouldReply).toBe(false);
+    expect(mfdDecision.reason).toBe('below_threshold');
+  });
 });
