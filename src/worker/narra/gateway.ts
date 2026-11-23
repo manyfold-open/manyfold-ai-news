@@ -693,6 +693,9 @@ function offTopicRedirectAi5(lang: LangCode): string {
 const EXPLICIT_EXPAND_STORY_RE =
   /(?:展開|展开)第\s*([1-5])|第\s*([1-5])\s*[條条則则篇]?(?:詳細|详细|細節|细节)|\b(?:expand|more\s+(?:on|about)|details?\s+(?:on|for))\s+(?:item|story|article|number|#)?\s*([1-5])\b/i;
 
+const SOURCE_FOLLOWUP_RE =
+  /(?:原始(?:來源|来源|公告|出處|出处)|官方(?:公告|聲明|声明|連結|链接|網址|网址)|原文(?:連結|链接|網址|网址))|\b(?:primary source|original (?:source|announcement|link)|official (?:source|announcement|statement|link))\b/i;
+
 const SPECIFIC_QUERY_RE =
   /\b\d{4}-\d{2}-\d{2}\b|(?:story|第)\s*\d+|第\s*[一二三四五1-5][條条則则個个篇]?|展開|展开|詳細|详细|openai|anthropic|claude|gemini|deepmind|deepseek|qwen|kimi|zhipu|nvidia|meta|llama|apple|google|microsoft|tesla|xai|search|find|why|compare|correction|remember|forget|搜尋|搜索|查找|查一下|為什麼|为什么|怎麼看|怎么看|比較|比较|更正|記得|记得|忘掉|忘記|忘记/i;
 
@@ -1002,7 +1005,8 @@ export async function fastRespondAi5(
       !isLatestIssueQuery(event.text, 'group') &&
       !hasDomainHit &&
       !SPECIFIC_QUERY_RE.test(cleanText) &&
-      !EXPLICIT_EXPAND_STORY_RE.test(cleanText)
+      !EXPLICIT_EXPAND_STORY_RE.test(cleanText) &&
+      !SOURCE_FOLLOWUP_RE.test(cleanText)
     ) {
       return '[NO_REPLY]';
     }
