@@ -692,6 +692,34 @@ describe('manyfold-ai-news Narra Gateway', () => {
     expect(specificFollowUp).toBeNull();
   });
 
+  it('distinguishes a single story’s media report from an official release page', async () => {
+    const env = baseEnv;
+    const issue = makePublishedIssue('2026-11-17', 40);
+    issue.stories[0]!.sources = issue.stories[0]!.sources.map((source) => ({
+      ...source, kind: 'reported', name: { en: 'Example News', zh: '新聞媒體' },
+      lang: 'zh', time: '2026-11-17T11:00:00Z', url: 'https://example.com/coverage',
+    }));
+    await saveIssue(env, issue.date, issue, 'published');
+
+    const event = makeEvent({ text: '這則有官方發布頁嗎？只有媒體來源也可以直接說。' });
+    const context = {
+      roomId: event.roomId, chatType: 'group' as const, members: [],
+      activeSession: { active: true },
+      recentHistory: [{
+        eventId: '$single-story', senderId: AI5_MATRIX_ID, isAgent: true, isSelf: true,
+        text: 'https://app.manyfold.ai/ai-news/zh/2026-11-17/1\nhttps://app.manyfold.ai/ai-news/zh/2026-11-17',
+        timestampMs: event.timestampMs - 1000,
+      }],
+    };
+    const decision = await routeEvent(event, context, AI5_AGENT_SPEC, { nowMs: event.timestampMs });
+    expect(decision.reason).toBe('active_session');
+    const memories = { userMemories: [], roomMemories: [], promptSafeLines: [] };
+    const reply = await fastRespondAi5(env, event, decision, memories, context);
+    expect(reply).toContain('沒有列出官方來源');
+    expect(reply).toContain('https://example.com/coverage');
+    expect(await fastRespondAi5(env, event, decision, memories)).toBeNull();
+  });
+
   it('requires AI-qualified terms so non-AI bare model/chip/issue/模型 do not false-trigger heuristicDomainScore', async () => {
     const grpCtx = { roomId: '!grp:matrix.netmind.chat', chatType: 'group' as const, members: [], recentHistory: [] };
 
