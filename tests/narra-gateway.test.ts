@@ -675,6 +675,14 @@ describe('manyfold-ai-news Narra Gateway', () => {
     );
     expect(genuineActiveQuery).toContain('本期焦點');
 
+    const sourceFollowUp = await fastRespondAi5(
+      baseEnv,
+      makeEvent({ chatType: 'group', text: '那有原始公告嗎？丟官方連結就好。' }),
+      activeSessionDecision,
+      emptyMem,
+    );
+    expect(sourceFollowUp).toBeNull();
+
     const specificFollowUp = await fastRespondAi5(
       baseEnv,
       makeEvent({ chatType: 'group', text: 'What did OpenAI announce in story 2?' }),
