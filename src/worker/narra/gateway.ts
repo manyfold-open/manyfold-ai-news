@@ -7,6 +7,7 @@ import {
   type InboundEvent,
   type LangCode,
   type RecallTurnResult,
+  type RoomContext,
   type TriageDecision,
 } from '@manyfold/narra-agent-kit';
 import type {
@@ -15,6 +16,7 @@ import type {
 } from '@manyfold/narra-agent-kit/worker';
 import { plainText, storyAt, storyPosition, type Issue } from '../../shared/issue';
 import { credentialFor } from '../connect';
+import { getIssue } from '../issues';
 import type { Env } from '../types';
 
 export const AI5_AGENT_ID = 'agt_agq66pewgf2ovmibamfujrwdqi';
@@ -709,7 +711,7 @@ const EXPLICIT_EXPAND_STORY_RE =
   /(?:展開|展开)第\s*([1-5])|第\s*([1-5])\s*[條条則则篇]?(?:詳細|详细|細節|细节)|\b(?:expand|more\s+(?:on|about)|details?\s+(?:on|for))\s+(?:item|story|article|number|#)?\s*([1-5])\b/i;
 
 const SOURCE_FOLLOWUP_RE =
-  /(?:原始(?:來源|来源|公告|出處|出处)|官方(?:公告|聲明|声明|連結|链接|網址|网址)|原文(?:連結|链接|網址|网址))|\b(?:primary source|original (?:source|announcement|link)|official (?:source|announcement|statement|link))\b/i;
+  /(?:原始(?:來源|来源|公告|出處|出处)|官方(?:公告|聲明|声明|連結|链接|網址|网址|[發发][布佈](?:頁|页))|原文(?:連結|链接|網址|网址))|\b(?:primary source|original (?:source|announcement|link)|official (?:source|announcement|statement|link|release page))\b/i;
 
 const SPECIFIC_QUERY_RE =
   /\b\d{4}-\d{2}-\d{2}\b|(?:story|第)\s*\d+|第\s*[一二三四五1-5][條条則则個个篇]?|展開|展开|詳細|详细|openai|anthropic|claude|gemini|deepmind|deepseek|qwen|kimi|zhipu|nvidia|meta|llama|apple|google|microsoft|tesla|xai|search|find|why|compare|correction|remember|forget|搜尋|搜索|查找|查一下|為什麼|为什么|怎麼看|怎么看|比較|比较|更正|記得|记得|忘掉|忘記|忘记/i;
@@ -993,11 +995,46 @@ export async function buildAi5ExtraEnvelopeFields(
   };
 }
 
+async function respondWithStorySource(
+  env: Env,
+  event: InboundEvent,
+  lang: LangCode,
+  context: RoomContext | undefined,
+): Promise<string | null> {
+  const prior = [...(context?.recentHistory ?? [])].reverse().find(
+    (turn) => (turn.isAgent || turn.isSelf) && turn.timestampMs <= event.timestampMs,
+  );
+  if (!prior || !(prior.isSelf || prior.senderId === AI5_MATRIX_ID)) return null;
+
+  const prefix = siteBase(env) + '/';
+  const links = [...new Set(prior.text.match(/https:\/\/[^\s<>]+/g) ?? [])]
+    .filter((url) => url.startsWith(prefix))
+    .map((url) => /^(?:zh|en)\/(\d{4}-\d{2}-\d{2})\/(\d+)$/.exec(url.slice(prefix.length)))
+    .filter((match) => match !== null);
+  if (links.length !== 1 || !env.DB) return null;
+
+  const [, date, position] = links[0]!;
+  const published = await getIssue(env, date!).catch(() => null);
+  if (!published?.issue || published.issue.sample) return null;
+  const slot = storyAt(published.issue, Number(position));
+  if (!slot || !('story' in slot)) return null;
+  const official = slot.story.sources.find((source) => source.kind === 'official');
+  const source = official ?? slot.story.sources.find((source) => source.kind === 'reported');
+  const sourceName = source && localizeIssueText(source.name[lang === 'en' ? 'en' : 'zh'], lang);
+  const label = lang === 'zh-Hant'
+    ? (official ? `官方來源（${sourceName}）` : source ? `這篇沒有列出官方來源。媒體報導（${sourceName}）` : '這篇沒有列出官方來源或媒體報導。')
+    : lang === 'zh-Hans'
+      ? (official ? `官方来源（${sourceName}）` : source ? `这篇没有列出官方来源。媒体报道（${sourceName}）` : '这篇没有列出官方来源或媒体报道。')
+      : (official ? `Official source (${sourceName})` : source ? `No official source is listed. Media coverage (${sourceName})` : 'This story lists no official source or media coverage.');
+  return sanitizeMobileLinks([label, source?.url].filter(Boolean).join('\n'));
+}
+
 export async function fastRespondAi5(
   env: Env,
   event: InboundEvent,
   decision: TriageDecision,
   _memories: RecallTurnResult,
+  context?: RoomContext,
 ): Promise<string | null> {
   const effectiveChatType: 'dm' | 'group' = decision.reason === 'dm' ? 'dm' : event.chatType;
   const cleanText = stripAgentMentions(event.text ?? '', ALL_KNOWN_MENTION_NAMES);
@@ -1056,6 +1093,11 @@ export async function fastRespondAi5(
       return '嗨！我是 AI in 5 📰 想看今天最新的 AI 新闻重点，或查任何 AI 模型与产业动态都可以直接问我！';
     }
     return "Hi! I'm AI in 5 📰 Ask me for today's top AI news highlights, or ask about any AI model or industry updates!";
+  }
+
+  if (decision.reason === 'active_session' && SOURCE_FOLLOWUP_RE.test(cleanText)) {
+    const sourceReply = await respondWithStorySource(env, event, decision.detectedLang, context);
+    if (sourceReply) return sourceReply;
   }
 
   const expandMatch = EXPLICIT_EXPAND_STORY_RE.exec(cleanText);
