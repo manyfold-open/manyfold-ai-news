@@ -558,6 +558,21 @@ describe('manyfold-ai-news Narra Gateway', () => {
     expect(voiceOut).not.toMatch(/网络安全|亿美元|轮融资/);
   });
 
+  it('serves the same published headlines when today comes at the end of the question', async () => {
+    const memories = { userMemories: [], roomMemories: [], promptSafeLines: [] };
+    const post = async (text: string) => {
+      const event = makeEvent({ text });
+      const context = { roomId: event.roomId, chatType: 'group' as const, members: [], recentHistory: [] };
+      const decision = await routeEvent(event, context, AI5_AGENT_SPEC, { nowMs: event.timestampMs });
+      expect(decision.shouldReply).toBe(true);
+      return fastRespondAi5(baseEnv, event, decision, memories);
+    };
+    const standard = await post('今天有什麼 AI 新聞？');
+    expect(standard).toContain('本期焦點');
+    expect(await post('有什麼AI新聞嗎今天')).toEqual(standard);
+    expect(isLatestIssueQuery('有什麼 OpenAI 新聞嗎今天', 'group')).toBe(false);
+  });
+
   it('UC-12: strips sibling agent mentions cleanly so @問一籤 @AI in 5 今日 AI 新聞 triggers AI5', async () => {
     const query = '@問一籤 @AI in 5 今日 AI 新聞';
     expect(isLatestIssueQuery(query, 'group')).toBe(true);
