@@ -303,7 +303,7 @@ describe('manyfold-ai-news Narra Gateway', () => {
       },
       emptyMem,
     );
-    expect(hantReply).toContain('今日焦點');
+    expect(hantReply).toContain('本期焦點');
     expect(hantReply).toContain('完整期號');
     expect(hantReply).toContain('https://app.manyfold.ai/ai-news/zh/2026-11-19/1');
     expect(hantReply).toContain('\n• ');
@@ -323,7 +323,7 @@ describe('manyfold-ai-news Narra Gateway', () => {
       },
       emptyMem,
     );
-    expect(hansReply).toContain('今日焦点');
+    expect(hansReply).toContain('本期焦点');
     expect(hansReply).toContain('完整期号');
     expect(hansReply).toContain('\n• ');
     expect(hansReply).not.toContain('\n1. ');
@@ -511,7 +511,7 @@ describe('manyfold-ai-news Narra Gateway', () => {
     const emptyMem = { userMemories: [], roomMemories: [], promptSafeLines: [] };
     const reply = await fastRespondAi5(uc4Env, event, decision, emptyMem);
     expect(reply).not.toBeNull();
-    expect(reply).toContain('今日焦點');
+    expect(reply).toContain('本期焦點');
     expect(reply).toContain('網絡安全');
     expect(reply).toContain('億美元');
     expect(reply).toContain('輪融資');
@@ -584,7 +584,7 @@ describe('manyfold-ai-news Narra Gateway', () => {
     const emptyMem = { userMemories: [], roomMemories: [], promptSafeLines: [] };
     const reply = await fastRespondAi5(baseEnv, event, decision, emptyMem);
     expect(reply).not.toBeNull();
-    expect(reply).toContain('AI in 5 第 42 期（2026-11-19）今日焦點');
+    expect(reply).toContain('AI in 5 第 42 期（2026-11-19）本期焦點');
   });
 
   it('UC-16: DM bare 你好 (via chatType or decision.reason === "dm") returns instant greeting + Top 3 in zh-Hant', async () => {
@@ -603,7 +603,7 @@ describe('manyfold-ai-news Narra Gateway', () => {
 
     const dmReply = await fastRespondAi5(baseEnv, dmEvent, dmDecision, emptyMem);
     expect(dmReply).not.toBeNull();
-    expect(dmReply).toContain('你好！這是今天 AI in 5 第 42 期的重點速覽（2026-11-19）：');
+    expect(dmReply).toContain('你好！這是 AI in 5 第 42 期的重點速覽（2026-11-19）：');
     expect(dmReply).toContain('https://app.manyfold.ai/ai-news/zh/2026-11-19/1');
 
     // Also works when event.chatType is 'group' on the wire but router inferred decision.reason === 'dm'
@@ -658,7 +658,7 @@ describe('manyfold-ai-news Narra Gateway', () => {
       activeSessionDecision,
       emptyMem,
     );
-    expect(genuineActiveQuery).toContain('今日焦點');
+    expect(genuineActiveQuery).toContain('本期焦點');
 
     const specificFollowUp = await fastRespondAi5(
       baseEnv,
@@ -770,7 +770,7 @@ describe('manyfold-ai-news Narra Gateway', () => {
 
     const bareReplyWithIssue = await fastRespondAi5(baseEnv, bareMentionEv, bareDecision, emptyMem);
     expect(bareReplyWithIssue).not.toBeNull();
-    expect(bareReplyWithIssue).toContain('你好！這是今天 AI in 5 第 42 期的重點速覽（2026-11-19）：');
+    expect(bareReplyWithIssue).toContain('你好！這是 AI in 5 第 42 期的重點速覽（2026-11-19）：');
     expect(bareReplyWithIssue).toContain('https://app.manyfold.ai/ai-news/zh/2026-11-19/1');
 
     // Explicit mention with greeting also triggers greeting + issue
@@ -789,7 +789,7 @@ describe('manyfold-ai-news Narra Gateway', () => {
     expect(explicitHiDecision.reason).toBe('explicit_mention');
     expect(explicitHiDecision.detectedLang).toBe('en');
     const explicitHiReply = await fastRespondAi5(baseEnv, explicitHiEv, explicitHiDecision, emptyMem);
-    expect(explicitHiReply).toContain("Hi! Here is today's AI in 5 issue 42 (2026-11-19):");
+    expect(explicitHiReply).toContain("Hi! Here is AI in 5 issue 42 (2026-11-19):");
 
     // When no published issue exists yet, returns friendly trilingual greeting fallback instead of null
     const emptyIssueDb = sqliteD1();
@@ -902,7 +902,7 @@ describe('manyfold-ai-news Narra Gateway', () => {
     const h1Reply = await fastRespondAi5(baseEnv, h1Event, h1Decision, emptyMem);
     expect(h1Reply).not.toBeNull();
     expect(h1Reply).toContain('第 42 期（2026-11-19）沒有提到 OpenAI、Anthropic 的相關更新');
-    expect(h1Reply).toContain('今天重點新聞頭條');
+    expect(h1Reply).toContain('本期重點新聞頭條');
     expect(h1Reply).toContain('• 麒麟實驗室開源 70B 模型');
     expect(h1Reply).toContain('https://app.manyfold.ai/ai-news/zh/2026-11-19');
     expect(h1Reply).not.toContain('\n1. ');
@@ -946,7 +946,7 @@ describe('manyfold-ai-news Narra Gateway', () => {
 
     const matchedHant = await fastRespondAi5(topicEnv, h1Event, h1Decision, emptyMem);
     expect(matchedHant).not.toBeNull();
-    expect(matchedHant).toContain('第 43 期（2026-11-20）關於 OpenAI、Anthropic 的今日動態');
+    expect(matchedHant).toContain('第 43 期（2026-11-20）關於 OpenAI、Anthropic 的動態');
     expect(matchedHant).toContain('• Anthropic 發布 Claude 4.5 編碼模型 —');
     expect(matchedHant).toContain('• OpenAI 將 GPT 批量接口價格下調 25%');
     expect(matchedHant).toContain('https://app.manyfold.ai/ai-news/zh/2026-11-20/1');
@@ -1098,19 +1098,19 @@ describe('manyfold-ai-news Narra Gateway', () => {
     const thxWithNewsDecision = await routeEvent(thxWithNewsEv, dmCtx, AI5_AGENT_SPEC, {
       nowMs: thxWithNewsEv.timestampMs,
     });
-    expect(await fastRespondAi5(baseEnv, thxWithNewsEv, thxWithNewsDecision, emptyMem)).toContain('今日焦點');
+    expect(await fastRespondAi5(baseEnv, thxWithNewsEv, thxWithNewsDecision, emptyMem)).toContain('本期焦點');
 
     // 3. Capability questions trigger greeting + Top 3
     const capEv = makeEvent({ roomId: dmCtx.roomId, chatType: 'dm', text: '你能幫我查什麼？' });
     const capDecision = await routeEvent(capEv, dmCtx, AI5_AGENT_SPEC, { nowMs: capEv.timestampMs });
     const capReply = await fastRespondAi5(baseEnv, capEv, capDecision, emptyMem);
-    expect(capReply).toContain('你好！這是今天 AI in 5 第 42 期的重點速覽（2026-11-19）：');
+    expect(capReply).toContain('你好！這是 AI in 5 第 42 期的重點速覽（2026-11-19）：');
     expect(capReply).toContain('https://app.manyfold.ai/ai-news/zh/2026-11-19/1');
 
     const capEnEv = makeEvent({ roomId: dmCtx.roomId, chatType: 'dm', text: 'what can you do?' });
     const capEnDecision = await routeEvent(capEnEv, dmCtx, AI5_AGENT_SPEC, { nowMs: capEnEv.timestampMs });
     const capEnReply = await fastRespondAi5(baseEnv, capEnEv, capEnDecision, emptyMem);
-    expect(capEnReply).toContain("Hi! Here is today's AI in 5 issue 42 (2026-11-19):");
+    expect(capEnReply).toContain("Hi! Here is AI in 5 issue 42 (2026-11-19):");
 
     // 4. Deep AI follow-ups in DM preserve null return for A2A
     for (const deepText of ['why?', 'story 2', 'compare OpenAI and Anthropic']) {
@@ -1481,7 +1481,7 @@ describe('manyfold-ai-news Narra Gateway', () => {
 
     const aiCircleReply = await fastRespondAi5(baseEnv, aiCircleEv, aiCircleDecision, emptyMem);
     expect(aiCircleReply).not.toBeNull();
-    expect(aiCircleReply).toContain('AI in 5 第 42 期（2026-11-19）今日焦点：');
+    expect(aiCircleReply).toContain('AI in 5 第 42 期（2026-11-19）本期焦点：');
     expect(aiCircleReply).toContain('完整期号： https://app.manyfold.ai/ai-news/zh/2026-11-19');
     expect(aiCircleReply).toContain('https://app.manyfold.ai/ai-news/zh/2026-11-19/1');
     expect(aiCircleReply).toContain('\n• ');
@@ -1500,8 +1500,8 @@ describe('manyfold-ai-news Narra Gateway', () => {
     // When latest issue has no Meta/Llama/Google mention -> clean zh-Hans absence + top headlines, 0 A2A calls
     const noMatchReply = await fastRespondAi5(baseEnv, thisWeekEv, thisWeekDecision, emptyMem);
     expect(noMatchReply).not.toBeNull();
-    expect(noMatchReply).toContain('AI in 5 今天第 42 期（2026-11-19）没有提到 Meta、Llama、Google 的相关更新。');
-    expect(noMatchReply).toContain('今天重点新闻头条：');
+    expect(noMatchReply).toContain('AI in 5 第 42 期（2026-11-19）没有提到 Meta、Llama、Google 的相关更新。');
+    expect(noMatchReply).toContain('本期重点新闻头条：');
     expect(noMatchReply).toContain('完整期号： https://app.manyfold.ai/ai-news/zh/2026-11-19');
     expect(fetchSpy).not.toHaveBeenCalled();
 
@@ -1537,7 +1537,7 @@ describe('manyfold-ai-news Narra Gateway', () => {
 
     const matchedReply = await fastRespondAi5(topicEnv, thisWeekEv, thisWeekDecision, emptyMem);
     expect(matchedReply).not.toBeNull();
-    expect(matchedReply).toContain('AI in 5 第 44 期（2026-11-20）关于 Meta、Llama、Google 的今日动态：');
+    expect(matchedReply).toContain('AI in 5 第 44 期（2026-11-20）关于 Meta、Llama、Google 的动态：');
     expect(matchedReply).toContain('• Google AI 发布 Gemini 3 开发者工具 —');
     expect(matchedReply).toContain('• Meta 公布 Llama 4 在端侧设备上的量化基准测试结果。');
     expect(matchedReply).toContain('https://app.manyfold.ai/ai-news/zh/2026-11-20/1');
@@ -1545,4 +1545,32 @@ describe('manyfold-ai-news Narra Gateway', () => {
     expect(matchedReply).not.toMatch(/\]\(https?:\/\//);
     expect(fetchSpy).not.toHaveBeenCalled();
   });
+});
+
+it('speaks only on its own topic in mixed group chatter', async () => {
+  const cases = [
+    '晚上能吃啥',
+    '我先去開個會',
+    '今晚倫敦有什麼市集',
+    '今天 AI 圈有啥新消息',
+    '能抽張塔羅看看工作嗎',
+    '幫我求一支籤',
+    '有英國簽證資料可以查嗎',
+    '晚餐 £80 我付的，四個人怎麼分',
+    'Boots 有折扣碼嗎',
+    '昨天吃火鍋超爽',
+  ];
+  const nowMs = Date.now();
+  const replies: string[] = [];
+  for (const text of cases) {
+    const event = makeEvent({ text, timestampMs: nowMs, chatType: 'group', mentions: [] });
+    const context = { roomId: event.roomId, chatType: 'group' as const, members: [], recentHistory: [] };
+    if ((await routeEvent(event, context, AI5_AGENT_SPEC, { nowMs })).shouldReply) replies.push(text);
+  }
+  expect(replies).toEqual(["今天 AI 圈有啥新消息"]);
+
+  const text = '今天 AI 圈有啥新消息';
+  const directedEvent = makeEvent({ text: `@Ken ${text}`, timestampMs: nowMs, chatType: 'group', mentions: ['@ken:example.com'] });
+  const directedContext = { roomId: directedEvent.roomId, chatType: 'group' as const, members: [], recentHistory: [] };
+  expect((await routeEvent(directedEvent, directedContext, AI5_AGENT_SPEC, { nowMs })).shouldReply).toBe(false);
 });

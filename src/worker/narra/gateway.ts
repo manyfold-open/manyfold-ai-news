@@ -320,10 +320,10 @@ export function formatIssueTop3(
     const headlines = issueHeadlines(issue, lang, 3);
     const joined = headlines.join('；');
     if (lang === 'zh-Hant') {
-      return `AI in 5 第 ${issue.number} 期重點新聞包括：${headlines.join('、')}。想聽哪一條的詳細內容？`;
+      return `AI in 5 第 ${issue.number} 期（${issue.date}）的重點新聞包括：${headlines.join('、')}。想聽哪一條的詳細內容？`;
     }
     if (lang === 'zh-Hans') {
-      return `AI in 5 第 ${issue.number} 期重点新闻包括：${joined}。想听哪一条的详细内容？`;
+      return `AI in 5 第 ${issue.number} 期（${issue.date}）的重点新闻包括：${joined}。想听哪一条的详细内容？`;
     }
     return `Here is AI in 5 issue ${issue.number} for ${issue.date}. Top stories include ${headlines.join('; ')}. Which story would you like to hear more about?`;
   }
@@ -331,16 +331,16 @@ export function formatIssueTop3(
   const lines: string[] = [];
   if (options.greeting) {
     if (lang === 'zh-Hant') {
-      lines.push(`你好！這是今天 AI in 5 第 ${issue.number} 期的重點速覽（${issue.date}）：`);
+      lines.push(`你好！這是 AI in 5 第 ${issue.number} 期的重點速覽（${issue.date}）：`);
     } else if (lang === 'zh-Hans') {
-      lines.push(`你好！这是今天 AI in 5 第 ${issue.number} 期的重点速览（${issue.date}）：`);
+      lines.push(`你好！这是 AI in 5 第 ${issue.number} 期的重点速览（${issue.date}）：`);
     } else {
-      lines.push(`Hi! Here is today's AI in 5 issue ${issue.number} (${issue.date}):`);
+      lines.push(`Hi! Here is AI in 5 issue ${issue.number} (${issue.date}):`);
     }
   } else if (lang === 'zh-Hant') {
-    lines.push(`AI in 5 第 ${issue.number} 期（${issue.date}）今日焦點：`);
+    lines.push(`AI in 5 第 ${issue.number} 期（${issue.date}）本期焦點：`);
   } else if (lang === 'zh-Hans') {
-    lines.push(`AI in 5 第 ${issue.number} 期（${issue.date}）今日焦点：`);
+    lines.push(`AI in 5 第 ${issue.number} 期（${issue.date}）本期焦点：`);
   } else {
     lines.push(`AI in 5 No. ${issue.number} (${issue.date}):`);
   }
@@ -591,9 +591,9 @@ export function formatTodayTopicReply(
 
     const lines: string[] = [];
     if (lang === 'zh-Hant') {
-      lines.push(`AI in 5 第 ${issue.number} 期（${issue.date}）關於 ${entityLabel} 的今日動態：`);
+      lines.push(`AI in 5 第 ${issue.number} 期（${issue.date}）關於 ${entityLabel} 的動態：`);
     } else if (lang === 'zh-Hans') {
-      lines.push(`AI in 5 第 ${issue.number} 期（${issue.date}）关于 ${entityLabel} 的今日动态：`);
+      lines.push(`AI in 5 第 ${issue.number} 期（${issue.date}）关于 ${entityLabel} 的动态：`);
     } else {
       lines.push(`AI in 5 No. ${issue.number} (${issue.date}) — updates on ${entityLabel}:`);
     }
@@ -621,26 +621,26 @@ export function formatTodayTopicReply(
   const headlines = issueHeadlines(issue, lang, 3);
   if (voice) {
     if (lang === 'zh-Hant') {
-      return `AI in 5 今天第 ${issue.number} 期（${issue.date}）沒有提到 ${entityLabel} 的相關更新。今天重點新聞包括：${headlines.join('、')}。想聽哪一條的詳細內容？`;
+      return `AI in 5 第 ${issue.number} 期（${issue.date}）沒有提到 ${entityLabel} 的相關更新。本期重點新聞包括：${headlines.join('、')}。想聽哪一條的詳細內容？`;
     }
     if (lang === 'zh-Hans') {
-      return `AI in 5 今天第 ${issue.number} 期（${issue.date}）没有提到 ${entityLabel} 的相关更新。今天重点新闻包括：${headlines.join('；')}。想听哪一条的详细内容？`;
+      return `AI in 5 第 ${issue.number} 期（${issue.date}）没有提到 ${entityLabel} 的相关更新。本期重点新闻包括：${headlines.join('；')}。想听哪一条的详细内容？`;
     }
-    return `Today's AI in 5 issue ${issue.number} (${issue.date}) doesn't mention updates from ${entityLabel}. Today's top stories include ${headlines.join('; ')}. Which story would you like to hear more about?`;
+    return `AI in 5 issue ${issue.number} (${issue.date}) doesn't mention updates from ${entityLabel}. This issue’s top stories include ${headlines.join('; ')}. Which story would you like to hear more about?`;
   }
 
   const lines: string[] = [];
   if (lang === 'zh-Hant') {
-    lines.push(`AI in 5 今天第 ${issue.number} 期（${issue.date}）沒有提到 ${entityLabel} 的相關更新。`);
-    lines.push('今天重點新聞頭條：');
+    lines.push(`AI in 5 第 ${issue.number} 期（${issue.date}）沒有提到 ${entityLabel} 的相關更新。`);
+    lines.push('本期重點新聞頭條：');
   } else if (lang === 'zh-Hans') {
-    lines.push(`AI in 5 今天第 ${issue.number} 期（${issue.date}）没有提到 ${entityLabel} 的相关更新。`);
-    lines.push('今天重点新闻头条：');
+    lines.push(`AI in 5 第 ${issue.number} 期（${issue.date}）没有提到 ${entityLabel} 的相关更新。`);
+    lines.push('本期重点新闻头条：');
   } else {
     lines.push(
-      `Today's published AI in 5 issue (No. ${issue.number}, ${issue.date}) doesn't mention updates from ${entityLabel} today.`,
+      `The published AI in 5 issue (No. ${issue.number}, ${issue.date}) doesn't mention updates from ${entityLabel}.`,
     );
-    lines.push("Today's top headlines:");
+    lines.push("This issue’s top headlines:");
   }
 
   headlines.forEach((headline) => {
