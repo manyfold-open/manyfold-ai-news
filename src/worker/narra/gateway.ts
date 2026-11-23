@@ -494,6 +494,10 @@ function shouldHandleTodayTopicLookup(cleanText: string): boolean {
   return extractTodayTopicTargets(cleanText, 'en') !== null;
 }
 
+const ONE_TOPIC_ITEM_RE = /(?:挑|選|选|給我|给我|只要)\s*(?:一|1)\s*[則则條条篇]|\b(?:just|only|pick|give me)\s+(?:one|1)\s+(?:story|item|headline)\b/i;
+const MODEL_RELEASE_QUERY_RE = /模型\s*(?:發布|发布|上線|上线)|\bmodel\s+(?:releases?|launches?)\b/i;
+const RELEASE_HEADLINE_RE = /發布|发布|推出|上線|上线|開放|开放|\b(?:launch(?:es|ed)?|releas(?:e|es|ed)|unveil(?:s|ed)?)\b/i;
+
 /**
  * Answers today/recent entity or AI-topic questions directly from the latest published D1 issue
  * without invoking an A2A call. When the entity is absent from today's issue, states so cleanly
@@ -511,6 +515,8 @@ export function formatTodayTopicReply(
     return formatIssueTop3(issue, lang, siteUrl, { voice });
   }
 
+  const oneItem = ONE_TOPIC_ITEM_RE.test(cleanText);
+  const releaseQuery = MODEL_RELEASE_QUERY_RE.test(cleanText);
   const fieldLang = lang === 'en' ? 'en' : 'zh';
   const localize = (raw: string): string => localizeIssueText(raw, lang);
   const entityLabel = formatEntityList(targets.labels, lang);
@@ -541,7 +547,8 @@ export function formatTodayTopicReply(
       todayNote ? plainText(todayNote.text.zh) : '',
     ].join('\n');
 
-    if (matchesAny(haystack)) {
+    const headline = [plainText(story.title.en), plainText(story.title.zh)].join(' ');
+    if (matchesAny(haystack) && (!releaseQuery || RELEASE_HEADLINE_RE.test(headline))) {
       matchedStoryIds.add(story.id);
       const pos = storyPosition(issue, story.id) || idx + 1;
       matched.push({
@@ -556,7 +563,7 @@ export function formatTodayTopicReply(
   for (const item of issue.today) {
     if (matchedStoryIds.has(item.id)) continue;
     const haystack = [plainText(item.text.en), plainText(item.text.zh)].join('\n');
-    if (matchesAny(haystack)) {
+    if (matchesAny(haystack) && (!releaseQuery || RELEASE_HEADLINE_RE.test(haystack))) {
       matched.push({ kind: 'note', text: localize(item.text[fieldLang]) });
     }
   }
@@ -569,12 +576,12 @@ export function formatTodayTopicReply(
       plainText(brief.text.en),
       plainText(brief.text.zh),
     ].join('\n');
-    if (matchesAny(haystack)) {
+    if (matchesAny(haystack) && (!releaseQuery || RELEASE_HEADLINE_RE.test(haystack))) {
       matched.push({ kind: 'note', text: localize(brief.text[fieldLang]) });
     }
   }
 
-  const topMatches = matched.slice(0, 3);
+  const topMatches = matched.slice(0, oneItem ? 1 : 3);
   const fullUrl = issueLink(siteUrl, lang, issue.date);
 
   if (topMatches.length > 0) {
@@ -618,6 +625,14 @@ export function formatTodayTopicReply(
     return sanitizeMobileLinks(lines.join('\n'));
   }
 
+  if (oneItem) {
+    const message = lang === 'zh-Hant'
+      ? `AI in 5 第 ${issue.number} 期（${issue.date}）沒有找到符合這個條件的新聞。`
+      : lang === 'zh-Hans'
+        ? `AI in 5 第 ${issue.number} 期（${issue.date}）没有找到符合这个条件的新闻。`
+        : `AI in 5 issue ${issue.number} (${issue.date}) contains no matching story.`;
+    return voice ? message : `${message}\n${fullUrl}`;
+  }
   const headlines = issueHeadlines(issue, lang, 3);
   if (voice) {
     if (lang === 'zh-Hant') {
