@@ -696,6 +696,9 @@ const EXPLICIT_EXPAND_STORY_RE =
 const SPECIFIC_QUERY_RE =
   /\b\d{4}-\d{2}-\d{2}\b|(?:story|第)\s*\d+|第\s*[一二三四五1-5][條条則则個个篇]?|展開|展开|詳細|详细|openai|anthropic|claude|gemini|deepmind|deepseek|qwen|kimi|zhipu|nvidia|meta|llama|apple|google|microsoft|tesla|xai|search|find|why|compare|correction|remember|forget|搜尋|搜索|查找|查一下|為什麼|为什么|怎麼看|怎么看|比較|比较|更正|記得|记得|忘掉|忘記|忘记/i;
 
+const TRAILING_TODAY_NEWS_RE =
+  /^有(?:什麼|什么|啥)\s*ai\s*(?:新聞|新闻|要聞|要闻|消息)(?:嗎|吗)?[，,\s]*(?:今天|今日)[？?。.!！]*$/i;
+
 const LATEST_NEWS_QUERY_RE =
   /(?:today'?s|latest|recent|new)\s+(?:ai\s+)?(?:issue|news|briefing|stories|headlines?|top\s*3|summary)|what'?s\s+(?:new|big|happening)\s+in\s+ai|anything\s+big\s+in\s+ai|today\s+in\s+3|ai\s+in\s+5\s+today|今天(?:有(?:什麼|什么))?\s*(?:ai)?\s*(?:新聞|新闻|要聞|要闻|頭條|头条|快報|快报|大新聞|大新闻)|今日\s*(?:ai)?\s*(?:新聞|新闻|要聞|要闻|三條|三条|簡報|简报|日報|日报|焦點|焦点)|最新(?:一期|的?\s*ai\s*(?:新聞|新闻|簡報|简报|要聞|要闻|消息))|今天的三[條条]|(?:今天|今日|這週|这周|本週|本周|最近).{0,6}ai\s*(?:圈|界|行業|行业)?(?:發生了?|发生了?|有)?(?:什麼|什么)?(?:大事|動態|动态|消息|熱點|热点|新聞|新闻|新發布|新发布)/i;
 
@@ -731,7 +734,7 @@ export function isLatestIssueQuery(text: string, chatType: 'dm' | 'group'): bool
   if (!clean) return chatType === 'dm';
   if (chatType === 'dm' && isBareGreeting(clean)) return true;
   if (SPECIFIC_QUERY_RE.test(clean) || EXPLICIT_EXPAND_STORY_RE.test(clean)) return false;
-  return LATEST_NEWS_QUERY_RE.test(clean);
+  return LATEST_NEWS_QUERY_RE.test(clean) || TRAILING_TODAY_NEWS_RE.test(clean.trim());
 }
 
 async function discoverGroupRooms(env: Env): Promise<string[]> {
