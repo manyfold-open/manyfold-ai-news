@@ -1015,6 +1015,17 @@ describe('manyfold-ai-news Narra Gateway', () => {
     expect(multiStoryTopicReply).not.toContain('\n1. ');
     expect(multiStoryTopicReply).not.toMatch(/\n\d+\.\s/);
 
+    const oneRelease = formatTodayTopicReply(
+      matchedIssue,
+      '活動先放著，最近有什麼 AI 模型發布的新聞？有的話挑一則。',
+      'zh-Hant',
+      'https://app.manyfold.ai/ai-news',
+      false,
+    );
+    expect(oneRelease).toContain('Anthropic 發布 Claude 4.5 編碼模型');
+    expect(oneRelease.match(/^• /gm)).toHaveLength(1);
+    expect(oneRelease).not.toContain('價格下調');
+
     const voiceNoMatch = formatTodayTopicReply(
       matchedIssue,
       'Any recent DeepSeek model launches?',
