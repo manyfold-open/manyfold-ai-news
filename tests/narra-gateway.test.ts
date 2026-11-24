@@ -362,6 +362,31 @@ describe('manyfold-ai-news Narra Gateway', () => {
     expect(deepQuestion).toBeNull();
   });
 
+
+  it.each(['有啥新聞可以看', '有啥新聞啊', '今天有什麼新聞', 'any news?'])(
+    'claims the bare group ask "%s" without a model call and answers with the latest issue (zack test, 2026-11-24)',
+    async (text) => {
+      const run = vi.fn();
+      const triageModel = ai5GatewayConfig.triageModel?.({ ...baseEnv, AI: { run } } as unknown as Env);
+      const event = makeEvent({ text, chatType: 'group', mentions: [], timestampMs: Date.now(), timeIso: new Date().toISOString() });
+      const context = { roomId: event.roomId, chatType: 'group' as const, members: [], recentHistory: [] };
+      const decision = await routeEvent(event, context, AI5_AGENT_SPEC, { triageModel });
+      expect(decision.shouldReply).toBe(true);
+      expect(run).not.toHaveBeenCalled();
+      const reply = await fastRespondAi5(baseEnv, event, decision, { userMemories: [], roomMemories: [], promptSafeLines: [] }, context);
+      expect(reply).toMatch(/AI in 5|AI 5/);
+      expect(reply).not.toBe('[NO_REPLY]');
+    },
+  );
+
+  it.each(['晚上可以幹嘛', '有啥中餐好吃', '肚子好餓', '我昨天看了新聞'])('leaves "%s" to normal triage', async (text) => {
+    const run = vi.fn(async () => ({ response: '{"score":0.1,"reason":"other"}' }));
+    const triageModel = ai5GatewayConfig.triageModel?.({ ...baseEnv, AI: { run } } as unknown as Env);
+    const event = makeEvent({ text, chatType: 'group', mentions: [], timestampMs: Date.now(), timeIso: new Date().toISOString() });
+    const context = { roomId: event.roomId, chatType: 'group' as const, members: [], recentHistory: [] };
+    expect((await routeEvent(event, context, AI5_AGENT_SPEC, { triageModel })).shouldReply).toBe(false);
+  });
+
   it('resolves Manyfold A2A credential from env override or sealed D1 agents row', async () => {
     const direct = await resolveAi5A2ACredential({
       ...baseEnv,
