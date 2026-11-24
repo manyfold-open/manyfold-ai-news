@@ -1,4 +1,6 @@
 import {
+  createWorkersAiTriageModel,
+  heuristicDomainScore,
   sanitizeMobileLinks,
   stripAgentMentions,
   toZhHant,
@@ -757,12 +759,21 @@ export function isBareGreeting(text: string): boolean {
   return BARE_GREETING_RE.test((text ?? '').trim());
 }
 
+/**
+ * A bare "any news?" in a group (有啥新聞可以看 / 有啥新聞啊 / 今天有什麼新聞 / any news?).
+ * "新聞" alone is deliberately not a domain keyword (other agents' topics mention news too), so
+ * these fell to the heuristic score whenever the triage model timed out, and nobody answered.
+ * Anchored to the whole message: longer sentences still go through normal triage.
+ */
+export const PLAIN_NEWS_ASK_RE =
+  /^(?:今天|今日|最近|現在|现在|這幾天|这几天)?[ \t]*(?:有啥|有什麼|有什么|有沒有|有没有|有甚麼|有)?[ \t]*(?:ai|AI)?[ \t]*(?:新聞|新闻|消息|news)[ \t]*(?:可以看|可看|嗎|吗|啊|呢|嘛|呀)?[？?！!。]*$|^(?:any|what'?s(?:\s+the)?)\s+(?:ai\s+)?news\??$/i;
+
 export function isLatestIssueQuery(text: string, chatType: 'dm' | 'group'): boolean {
   const clean = stripAgentMentions(text ?? '', ALL_KNOWN_MENTION_NAMES);
   if (!clean) return chatType === 'dm';
   if (chatType === 'dm' && isBareGreeting(clean)) return true;
   if (SPECIFIC_QUERY_RE.test(clean) || EXPLICIT_EXPAND_STORY_RE.test(clean)) return false;
-  return LATEST_NEWS_QUERY_RE.test(clean) || TRAILING_TODAY_NEWS_RE.test(clean.trim());
+  return LATEST_NEWS_QUERY_RE.test(clean) || TRAILING_TODAY_NEWS_RE.test(clean.trim()) || PLAIN_NEWS_ASK_RE.test(clean.trim());
 }
 
 async function discoverGroupRooms(env: Env): Promise<string[]> {
@@ -1201,6 +1212,19 @@ export async function resolveAi5A2ACredential(env: Env): Promise<NarraA2ACredent
 
 export const ai5GatewayConfig: NarraGatewayConfig<Env> = {
   spec: AI5_AGENT_SPEC,
+  triageModel: (env) => {
+    const model =
+      env.AI && (env.NARRA_AI_TRIAGE ?? '').trim() !== 'off'
+        ? createWorkersAiTriageModel(env.AI, { model: env.AI_TRIAGE_MODEL })
+        : undefined;
+    return {
+      ...model,
+      score: async (input) => {
+        if (PLAIN_NEWS_ASK_RE.test(input.event.text.trim())) return { score: 0.8, reason: 'plain_news_ask' };
+        return model?.score(input) ?? { score: heuristicDomainScore(input.event, input.spec, input.context) };
+      },
+    };
+  },
   fetchUpdates: fetchAi5Updates,
   fastRespond: fastRespondAi5,
   resolveA2ACredential: resolveAi5A2ACredential,
