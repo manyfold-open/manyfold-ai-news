@@ -1,5 +1,5 @@
 import {
-  createWorkersAiTriageModel,
+  createDefaultTriageModel,
   heuristicDomainScore,
   sanitizeMobileLinks,
   stripAgentMentions,
@@ -1213,10 +1213,8 @@ export async function resolveAi5A2ACredential(env: Env): Promise<NarraA2ACredent
 export const ai5GatewayConfig: NarraGatewayConfig<Env> = {
   spec: AI5_AGENT_SPEC,
   triageModel: (env) => {
-    const model =
-      env.AI && (env.NARRA_AI_TRIAGE ?? '').trim() !== 'off'
-        ? createWorkersAiTriageModel(env.AI, { model: env.AI_TRIAGE_MODEL })
-        : undefined;
+    // Ask-aware (any language) when NARRA_GROUP_TRIAGE=ask, else the keyword-gated triage.
+    const model = createDefaultTriageModel(env);
     return {
       ...model,
       score: async (input) => {
