@@ -47,6 +47,8 @@ export const ALL_KNOWN_MENTION_NAMES = [
 ] as const;
 
 export const AI5_AGENT_SPEC: AgentSpec = {
+  matchesIndependentGroupRequest: (text, context) =>
+    SOURCE_FOLLOWUP_RE.test(text) && Boolean(recentSingleStory(context, DEFAULT_SITE_URL, Date.now())),
   id: 'ai5-chat',
   matrixId: AI5_MATRIX_ID,
   name: 'AI in 5',
@@ -1001,25 +1003,32 @@ export async function buildAi5ExtraEnvelopeFields(
   };
 }
 
+function recentSingleStory(context: RoomContext | undefined, site: string, now: number) {
+  const prior = [...(context?.recentHistory ?? [])].reverse().find(
+    (turn) => (turn.isAgent || turn.isSelf) && turn.timestampMs <= now,
+  );
+  if (!prior || !(prior.isSelf || prior.senderId === AI5_MATRIX_ID) || now - prior.timestampMs > 180_000) {
+    return null;
+  }
+
+  const prefix = site + '/';
+  const links = [...new Set(prior.text.match(/https:\/\/[^\s<>]+/g) ?? [])]
+    .filter((url) => url.startsWith(prefix))
+    .map((url) => /^(?:zh|en)\/(\d{4}-\d{2}-\d{2})\/(\d+)$/.exec(url.slice(prefix.length)))
+    .filter((match) => match !== null);
+  return links.length === 1 ? links[0] : null;
+}
+
 async function respondWithStorySource(
   env: Env,
   event: InboundEvent,
   lang: LangCode,
   context: RoomContext | undefined,
 ): Promise<string | null> {
-  const prior = [...(context?.recentHistory ?? [])].reverse().find(
-    (turn) => (turn.isAgent || turn.isSelf) && turn.timestampMs <= event.timestampMs,
-  );
-  if (!prior || !(prior.isSelf || prior.senderId === AI5_MATRIX_ID)) return null;
+  const story = recentSingleStory(context, siteBase(env), event.timestampMs);
+  if (!story || !env.DB) return null;
 
-  const prefix = siteBase(env) + '/';
-  const links = [...new Set(prior.text.match(/https:\/\/[^\s<>]+/g) ?? [])]
-    .filter((url) => url.startsWith(prefix))
-    .map((url) => /^(?:zh|en)\/(\d{4}-\d{2}-\d{2})\/(\d+)$/.exec(url.slice(prefix.length)))
-    .filter((match) => match !== null);
-  if (links.length !== 1 || !env.DB) return null;
-
-  const [, date, position] = links[0]!;
+  const [, date, position] = story;
   const published = await getIssue(env, date!).catch(() => null);
   if (!published?.issue || published.issue.sample) return null;
   const slot = storyAt(published.issue, Number(position));
@@ -1101,7 +1110,7 @@ export async function fastRespondAi5(
     return "Hi! I'm AI in 5 📰 Ask me for today's top AI news highlights, or ask about any AI model or industry updates!";
   }
 
-  if (decision.reason === 'active_session' && SOURCE_FOLLOWUP_RE.test(cleanText)) {
+  if ((decision.reason === 'active_session' || decision.independentGroupReply) && SOURCE_FOLLOWUP_RE.test(cleanText)) {
     const sourceReply = await respondWithStorySource(env, event, decision.detectedLang, context);
     if (sourceReply) return sourceReply;
   }
