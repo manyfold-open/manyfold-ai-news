@@ -312,14 +312,20 @@ export function formatIssueTop3(
   issue: Issue,
   lang: LangCode,
   siteUrl: string,
-  options: { voice?: boolean; greeting?: boolean } = {},
+  options: { voice?: boolean; greeting?: boolean; oneStory?: boolean } = {},
 ): string {
   const fieldLang = lang === 'en' ? 'en' : 'zh';
   const localize = (raw: string): string => localizeIssueText(raw, lang);
-  const stories = issue.stories.slice(0, 3);
+  const limit = options.oneStory ? 1 : 3;
+  const stories = issue.stories.slice(0, limit);
 
   if (options.voice) {
-    const headlines = issueHeadlines(issue, lang, 3);
+    const headlines = issueHeadlines(issue, lang, limit);
+    if (options.oneStory && headlines.length) {
+      if (lang === 'zh-Hant') return `這期我挑這一則：${headlines[0]}。`;
+      if (lang === 'zh-Hans') return `这期我挑这一则：${headlines[0]}。`;
+      return `One story from the latest issue: ${headlines[0]}.`;
+    }
     const joined = headlines.join('；');
     if (lang === 'zh-Hant') {
       return `AI in 5 第 ${issue.number} 期（${issue.date}）的重點新聞包括：${headlines.join('、')}。想聽哪一條的詳細內容？`;
@@ -357,12 +363,12 @@ export function formatIssueTop3(
       lines.push(url);
     });
   } else if (issue.today.length > 0) {
-    issue.today.slice(0, 3).forEach((item) => {
+    issue.today.slice(0, limit).forEach((item) => {
       lines.push(`• ${localize(item.text[fieldLang])}`);
     });
     lines.push(issueLink(siteUrl, lang, issue.date));
   } else {
-    issue.briefs.slice(0, 3).forEach((brief) => {
+    issue.briefs.slice(0, limit).forEach((brief) => {
       lines.push(`• ${localize(brief.text[fieldLang])}`);
     });
     lines.push(issueLink(siteUrl, lang, issue.date));
@@ -720,7 +726,7 @@ const TRAILING_TODAY_NEWS_RE =
   /^有(?:什麼|什么|啥)\s*ai\s*(?:新聞|新闻|要聞|要闻|消息)(?:嗎|吗)?[，,\s]*(?:今天|今日)[？?。.!！]*$/i;
 
 const LATEST_NEWS_QUERY_RE =
-  /(?:today'?s|latest|recent|new)\s+(?:ai\s+)?(?:issue|news|briefing|stories|headlines?|top\s*3|summary)|what'?s\s+(?:new|big|happening)\s+in\s+ai|anything\s+big\s+in\s+ai|today\s+in\s+3|ai\s+in\s+5\s+today|今天(?:有(?:什麼|什么))?\s*(?:ai)?\s*(?:新聞|新闻|要聞|要闻|頭條|头条|快報|快报|大新聞|大新闻)|今日\s*(?:ai)?\s*(?:新聞|新闻|要聞|要闻|三條|三条|簡報|简报|日報|日报|焦點|焦点)|最新(?:一期|的?\s*ai\s*(?:新聞|新闻|簡報|简报|要聞|要闻|消息))|今天的三[條条]|(?:今天|今日|這週|这周|本週|本周|最近).{0,6}ai\s*(?:圈|界|行業|行业)?(?:發生了?|发生了?|有)?(?:什麼|什么)?(?:大事|動態|动态|消息|熱點|热点|新聞|新闻|新發布|新发布)/i;
+  /(?:today'?s|latest|recent|new)\s+(?:ai\s+)?(?:issue|news|briefing|stories|headlines?|top\s*3|summary)|what'?s\s+(?:new|big|happening)\s+in\s+ai|anything\s+big\s+in\s+ai|today\s+in\s+3|ai\s+in\s+5\s+today|今天(?:有(?:什麼|什么))?\s*(?:ai)?\s*(?:新聞|新闻|要聞|要闻|頭條|头条|快報|快报|大新聞|大新闻)|今日\s*(?:ai)?\s*(?:新聞|新闻|要聞|要闻|三條|三条|簡報|简报|日報|日报|焦點|焦点)|最新(?:一期|的?\s*ai\s*(?:新聞|新闻|簡報|简报|要聞|要闻|消息))|今天的三[條条]|(?:今天|今日|這週|这周|本週|本周|最近).{0,6}ai\s*(?:圈|界|行業|行业)?(?:發生了?|发生了?|有)?(?:什麼|什么)?(?:大事|動態|动态|新?消息|熱點|热点|新聞|新闻|新發布|新发布)/i;
 
 const CJK_CHAR_RE = /[\u3400-\u9FFF\uF900-\uFAFF]/;
 const escapeKeywordRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -1150,6 +1156,7 @@ export async function fastRespondAi5(
   return formatIssueTop3(latest.issue, decision.detectedLang, siteBase(env), {
     voice: Boolean(event.isVoice),
     greeting: effectiveChatType === 'dm' && isBareGreeting(cleanText),
+    oneStory: ONE_TOPIC_ITEM_RE.test(cleanText),
   });
 }
 
