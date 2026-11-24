@@ -32,7 +32,9 @@
     { "pattern": "app.manyfold.ai/ai-news", "zone_name": "manyfold.ai" },
     { "pattern": "app.manyfold.ai/ai-news/*", "zone_name": "manyfold.ai" }
   ],
-  "workers_dev": false,
+  // On for the Narra push wake only: Synapse needs /_matrix/push/v1/notify at a host root,
+  // and app.manyfold.ai's root belongs to other apps.
+  "workers_dev": true,
   "assets": {
     "directory": "./dist/client",
     "binding": "ASSETS",
@@ -40,6 +42,8 @@
     // Pages go through the Worker so each one gets its own title, share card and status
     // (src/worker/pages.ts); built files and public/ai-news files are served directly.
     "run_worker_first": [
+      // Narra push wake (Synapse pusher), served on the workers.dev hostname's root.
+      "/_matrix/*",
       "/ai-news",
       "/ai-news/*",
       "!/ai-news/assets/*",
@@ -95,6 +99,13 @@
     // Narra Messenger gateway runtime (enabled with bound Direct Matrix identity).
     "NARRA_GATEWAY_ENABLED": "on",
     "NARRA_SYNC": "on",
+    // Push mode: Synapse wakes the sync Durable Object for each new event instead of it
+    // long-polling /sync around the clock (billed as DO duration). Synapse only accepts a
+    // pusher at exactly /_matrix/push/v1/notify, so this must be a hostname whose root this
+    // Worker serves. Needs the NARRA_PUSH_SECRET secret (>= 16 chars, e.g. `openssl rand -hex 24`
+    // | npx wrangler secret put NARRA_PUSH_SECRET); without it the kit keeps long-polling.
+    "NARRA_SYNC_MODE": "push",
+    "NARRA_PUSH_URL": "https://manyfold-ai-news.netmind-ai.workers.dev",
     "NARRA_AGENT_ID": "agt_agq66pewgf2ovmibamfujrwdqi",
     "NARRA_MATRIX_ID": "@agent-3add8bb6:matrix.netmind.chat"
   }
