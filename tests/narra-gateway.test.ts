@@ -692,6 +692,17 @@ describe('manyfold-ai-news Narra Gateway', () => {
     expect(specificFollowUp).toBeNull();
   });
 
+  it('keeps colloquial requests for the latest AI news to exactly one story', async () => {
+    const event = makeEvent({ text: '今天 AI 圈有什麼新消息？挑一則最重要的就好。' });
+    const context = { roomId: event.roomId, chatType: 'group' as const, members: [], recentHistory: [] };
+    const decision = await routeEvent(event, context, AI5_AGENT_SPEC, { nowMs: event.timestampMs });
+    const reply = await fastRespondAi5(baseEnv, event, decision,
+      { userMemories: [], roomMemories: [], promptSafeLines: [] }, context);
+    expect(reply?.match(/^• /gm)).toHaveLength(1);
+    expect(reply).toContain('/2026-11-19/1');
+    expect(reply).not.toContain('/2026-11-19/2');
+  });
+
   it('distinguishes a single story’s media report from an official release page', async () => {
     const env = baseEnv;
     const issue = makePublishedIssue('2026-11-17', 40);
