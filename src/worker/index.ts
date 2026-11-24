@@ -115,6 +115,7 @@ import {
   BaseNarraRoomCoordinator,
   getNarraGatewayStatus,
   kickNarraGateway,
+  handleNarraPushRequest,
 } from '@manyfold/narra-agent-kit/worker';
 import { ai5GatewayConfig } from './narra/gateway';
 
@@ -582,7 +583,9 @@ export class NarraRoomCoordinator extends BaseNarraRoomCoordinator<Env> {
 }
 
 export default {
-  fetch: (request, env, ctx) => app.fetch(withoutBase(request), env, ctx),
+  // Synapse wakes the Narra sync Durable Object at /_matrix/push/v1/notify (push mode).
+  fetch: async (request, env, ctx) =>
+    (await handleNarraPushRequest(request, env)) ?? app.fetch(withoutBase(request), env, ctx),
   // wrangler.jsonc triggers.crons: the daily pipeline, its one retry (followed by the
   // daily clean-up of old data), the 15-minute email tick, and the 5-minute Narra
   // Gateway watchdog (a no-op while NARRA_GATEWAY_ENABLED=off). Each cron is its own
