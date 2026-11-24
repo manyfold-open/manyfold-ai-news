@@ -728,6 +728,25 @@ describe('manyfold-ai-news Narra Gateway', () => {
     const reply = await fastRespondAi5(env, event, decision, memories, context);
     expect(reply).toContain('沒有列出官方來源');
     expect(reply).toContain('https://example.com/coverage');
+    vi.spyOn(Date, 'now').mockReturnValue(event.timestampMs);
+    const returning = makeEvent({ text: '回来了，那则的原始来源有链接吗？只要来源就好。' });
+    const afterAside = {
+      ...context, activeSession: { active: false },
+      peers: [{ matrixId: '@agent-peer:matrix.netmind.chat', displayName: 'Other agent' }],
+      recentHistory: [...context.recentHistory, {
+        eventId: '$aside', senderId: returning.senderId, isAgent: false, isSelf: false,
+        text: '我先去倒杯水，等一下。', timestampMs: returning.timestampMs - 500,
+      }],
+    };
+    const returningDecision = await routeEvent(returning, afterAside, AI5_AGENT_SPEC, { nowMs: returning.timestampMs });
+    expect(returningDecision.independentGroupReply).toBe(true);
+    expect(await fastRespondAi5(env, returning, returningDecision, memories, afterAside))
+      .toContain('https://example.com/coverage');
+    const afterPeer = { ...afterAside, recentHistory: [...afterAside.recentHistory, {
+      ...afterAside.recentHistory[0]!, senderId: '@agent-peer:matrix.netmind.chat', isSelf: false,
+      timestampMs: returning.timestampMs - 200,
+    }] };
+    expect(AI5_AGENT_SPEC.matchesIndependentGroupRequest?.(returning.text, afterPeer)).toBe(false);
     expect(await fastRespondAi5(env, event, decision, memories)).toBeNull();
   });
 
