@@ -1251,5 +1251,16 @@ export const ai5GatewayConfig: NarraGatewayConfig<Env> = {
       'Give me a quick AI news summary',
       '這個 AI 消息是真的嗎',
     ],
+    // Requests that belong to other agents in the same rooms (Manyfold Data's datasets, Spotted,
+    // food): closer to these than to AI in 5's profile means it stays asleep.
+    notExamples: [
+      '這週末倫敦有什麼 AI 黑客松？',
+      '哪些 AI 新創拿到了 A 輪融資？',
+      'Which AI startups raised a Series B this month?',
+      '有哪些 AI 加速器或獎學金可以申請？',
+      '這週末倫敦有什麼快閃活動？',
+      '晚餐吃啥好',
+      '幫我抽一張塔羅牌',
+    ],
   },
 };
