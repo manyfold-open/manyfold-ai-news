@@ -877,6 +877,8 @@ export async function fetchAi5Updates(env: Env, sinceIso: string): Promise<Agent
     title: `AI in 5 No. ${latest.issue.number} (${latest.issue.date})`,
     text,
     lang: 'en',
+    // The kit renders it in the language people in that room write in.
+    render: (lang: LangCode) => formatIssueTop3(latest.issue, lang, siteBase(env)),
     createdAt,
   }));
 }
