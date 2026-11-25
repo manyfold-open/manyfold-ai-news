@@ -1236,4 +1236,20 @@ export const ai5GatewayConfig: NarraGatewayConfig<Env> = {
         ? '📰 正在帮你整理最新 AI 新闻与重点分析，稍等一下…'
         : '📰 Checking the latest AI news details for you, one moment…',
   buildExtraEnvelopeFields: buildAi5ExtraEnvelopeFields,
+  // Chat-native pipeline (rooms in NARRA_PIPELINE_ROOMS): example asks, in any language, that the
+  // relevance scorer compares group messages with instead of keyword lists.
+  v2: {
+    wakeExamples: [
+      'Any AI news today?',
+      "What's new in AI this week?",
+      '今天有什麼 AI 新聞？',
+      '有啥新闻吗今天',
+      'Did OpenAI release a new model?',
+      'Google 最近 AI 有什麼新東西',
+      'What happened with Anthropic / Claude lately?',
+      '最近有什麼新模型發布',
+      'Give me a quick AI news summary',
+      '這個 AI 消息是真的嗎',
+    ],
+  },
 };
