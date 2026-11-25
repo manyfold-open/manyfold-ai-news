@@ -224,6 +224,10 @@ describe('manyfold-ai-news Narra Gateway', () => {
     expect(updates[0].text).not.toContain('\n1. ');
     expect(updates[0].text).not.toMatch(/\n\d+\.\s/);
     expect(updates[0].text).not.toMatch(/\]\(https?:\/\//);
+    // A Chinese-speaking group gets the digest in Chinese (Netmind London got it in English).
+    const zh = updates[0].render?.('zh-Hant', []) ?? '';
+    expect(zh).toContain('https://app.manyfold.ai/ai-news/zh/2026-11-19/1');
+    expect(zh).not.toBe(updates[0].text);
 
     // Deduplicated across staggered kickNarraGateway runs
     const minute = staggerWindowMinute('ai5-chat', groupRoom, 60);
